@@ -3386,7 +3386,7 @@ static const struct usb_device_id	products [] = {
 }, {
 	// 88178 for billianton linksys
 	USB_DEVICE (0x077b, 0x2226),
-	.driver_info =	(unsigned long) &ax88178_info,
+	.driver_info =	(unsigned long) &ax8817x_info,
 }, {
 	// ABOCOM for linksys
 	USB_DEVICE (0x1737, 0x0039),
