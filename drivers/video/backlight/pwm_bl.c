@@ -20,6 +20,16 @@
 #include <linux/pwm.h>
 #include <linux/pwm_backlight.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
+
+#include <linux/gpio.h>
+#include "../gpio-names.h"
+#include "../tegra/dc/dc_priv.h"
+
+#define cardhu_bl_enb			TEGRA_GPIO_PH2
+
+static atomic_t sd_brightness = ATOMIC_INIT(255);
+extern struct tegra_dc *tegra_dcs[TEGRA_MAX_DC];
 
 struct pwm_bl_data {
 	struct pwm_device	*pwm;
@@ -36,6 +46,7 @@ static int pwm_backlight_update_status(struct backlight_device *bl)
 	struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
 	int brightness = bl->props.brightness;
 	int max = bl->props.max_brightness;
+	static int bl_enable_sleep_control = 0;	// sleep only when suspend or resume
 
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
@@ -43,18 +54,35 @@ static int pwm_backlight_update_status(struct backlight_device *bl)
 	if (bl->props.fb_blank != FB_BLANK_UNBLANK)
 		brightness = 0;
 
-	if (pb->notify)
-		brightness = pb->notify(pb->dev, brightness);
-
 	if (brightness == 0) {
+		if (pb->notify)
+			brightness = pb->notify(pb->dev, brightness);
+		if(bl_enable_sleep_control)
+		{
+			msleep(5);
+			bl_enable_sleep_control = 0;
+		}
 		pwm_config(pb->pwm, 0, pb->period);
 		pwm_disable(pb->pwm);
 	} else {
+		if(tegra_dcs[0])
+			sd_brightness = *(tegra_dcs[0]->out->sd_settings->sd_brightness);
+		int cur_sd_brightness = atomic_read(&sd_brightness);
+		brightness = (brightness * cur_sd_brightness) / 255;
+
 		brightness = pb->lth_brightness +
 			(brightness * (pb->period - pb->lth_brightness) / max);
 		pwm_config(pb->pwm, brightness, pb->period);
 		pwm_enable(pb->pwm);
+		if(!bl_enable_sleep_control)
+		{
+			msleep(10);
+			bl_enable_sleep_control = 1;
+		}
+
+		gpio_set_value(cardhu_bl_enb, !!brightness);
 	}
+
 	return 0;
 }
 
