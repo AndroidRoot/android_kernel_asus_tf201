@@ -127,7 +127,7 @@ config USB_USBNET
 	  To compile this driver as a module, choose M here: the
 	  module will be called usbnet.
 
-config USB_NET_AX8817X
+config USB_NET_AX88772B
 	tristate "ASIX AX88xxx Based USB 2.0 Ethernet Adapters"
 	depends on USB_USBNET
 	select CRC32
@@ -139,6 +139,8 @@ config USB_NET_AX8817X
  	  This driver should work with at least the following devices:
 	    * Aten UC210T
 	    * ASIX AX88172
+            * ASIX AX88772B
+	    * ASIX AX88772A
 	    * Billionton Systems, USB2AR
 	    * Buffalo LUA-U2-KTX
 	    * Corega FEther USB2-TX
