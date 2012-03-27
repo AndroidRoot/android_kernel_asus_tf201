@@ -426,6 +426,12 @@ config TOUCHSCREEN_ATMEL_TSADCC
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_tsadcc.
 
+config TOUCHSCREEN_ATMEL_MT_T9
+	tristate "Atmel legacy T9 Touchscreen Interface"
+	depends on I2C
+	help
+	  To compile this driver as a module, choose M here: the
+	  module will be called atmel_tsadcc.
 config TOUCHSCREEN_UCB1400
 	tristate "Philips UCB1400 touchscreen"
 	depends on AC97_BUS
@@ -733,4 +739,10 @@ config TOUCHSCREEN_TPS6507X
 	  To compile this driver as a module, choose M here: the
 	  module will be called tps6507x_ts.
 
+config TOUCHSCREEN_ELAN_TF_3K
+        tristate "ELAN legacy Touchscreen Interface"
+        depends on I2C
+        help
+          To compile this driver as a module, choose M here: the
+          module will be called atmel_tsadcc.
 endif
