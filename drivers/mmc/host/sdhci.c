@@ -29,6 +29,8 @@
 
 #include "sdhci.h"
 
+#include "../debug_mmc.h"
+
 #define DRIVER_NAME "sdhci"
 
 #define DBG(f, x...) \
@@ -1244,6 +1246,7 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (host->version >= SDHCI_SPEC_300) {
 		u16 clk, ctrl_2;
+		unsigned int clock;
 
 		/* In case of UHS-I modes, set High Speed Enable */
 		if ((ios->timing == MMC_TIMING_UHS_SDR50) ||
@@ -1836,9 +1839,13 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 		mmc_hostname(host->mmc), intmask);
 
 	if (intmask & (SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE)) {
+		MMC_printk("%s: intmask 0x%08x SDHCI_INT_STATUS 0x%08x", mmc_hostname(host->mmc), intmask, sdhci_readl(host, SDHCI_INT_STATUS));
+
 		sdhci_writel(host, intmask & (SDHCI_INT_CARD_INSERT |
 			SDHCI_INT_CARD_REMOVE), SDHCI_INT_STATUS);
-		tasklet_schedule(&host->card_tasklet);
+
+		if (strcmp(mmc_hostname(host->mmc), "mmc2"))
+			tasklet_schedule(&host->card_tasklet);
 	}
 
 	intmask &= ~(SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE);

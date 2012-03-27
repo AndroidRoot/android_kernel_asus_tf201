@@ -40,7 +40,9 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
+#include <linux/gpio.h>
 #include "queue.h"
+#include "../debug_mmc.h"
 
 MODULE_ALIAS("mmc:block");
 #ifdef MODULE_PARAM_PREFIX
@@ -371,6 +373,10 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 	mmc_claim_host(card->host);
 
 	do {
+		if (mmc_card_sd(card) && gpio_get_value(SD_CARD_DETECT) == 1) {
+			MMC_DBG("No card, stop read or write");
+			goto err;
+		}
 		struct mmc_command cmd;
 		u32 readcmd, writecmd, status = 0;
 
@@ -453,6 +459,9 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 
 		mmc_queue_bounce_pre(mq);
 
+		if (mmc_card_sd(card) && gpio_get_value(SD_CARD_DETECT) == 1)
+			goto err;
+
 		mmc_wait_for_req(card->host, &brq.mrq);
 
 		mmc_queue_bounce_post(mq);
@@ -470,6 +479,8 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 				disable_multi = 1;
 				continue;
 			}
+			if (mmc_card_sd(card) && gpio_get_value(SD_CARD_DETECT) == 1)
+				goto err;
 			status = get_card_status(card, req);
 		} else if (disable_multi == 1) {
 			disable_multi = 0;
@@ -585,7 +596,7 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 		ret = __blk_end_request(req, 0, brq.data.bytes_xfered);
 		spin_unlock_irq(&md->lock);
 	}
-
+err:
 	mmc_release_host(card->host);
 
 	spin_lock_irq(&md->lock);
@@ -803,6 +814,8 @@ static void mmc_blk_remove(struct mmc_card *card)
 	mmc_set_drvdata(card, NULL);
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	mmc_set_bus_resume_policy(card->host, 0);
+	card->host->bus_resume_flags &= ~MMC_BUSRESUME_NEEDS_RESUME;
+	MMC_printk("%s: bus_resume_flags 0x%x", mmc_hostname(card->host), card->host->bus_resume_flags);
 #endif
 }
 
