@@ -45,6 +45,7 @@ struct cpufreq_stats {
 };
 
 static DEFINE_PER_CPU(struct cpufreq_stats *, cpufreq_stats_table);
+static DEFINE_PER_CPU(struct mutex , cpufreq_stats_table_lock);
 
 struct cpufreq_stats_attribute {
 	struct attribute attr;
@@ -159,6 +160,10 @@ static struct attribute_group stats_attr_group = {
 static int freq_table_get_index(struct cpufreq_stats *stat, unsigned int freq)
 {
 	int index;
+	if(!stat->freq_table){
+		WARN(1,"freq_table_get_index: freq_table is null! smp=%u cpu=%u\n",smp_processor_id(),stat->cpu);
+		return -1;
+	}
 	for (index = 0; index < stat->state_num; index++)
 		if (stat->freq_table[index] > freq)
 			break;
@@ -170,12 +175,16 @@ static int freq_table_get_index(struct cpufreq_stats *stat, unsigned int freq)
  */
 static void cpufreq_stats_free_table(unsigned int cpu)
 {
-	struct cpufreq_stats *stat = per_cpu(cpufreq_stats_table, cpu);
+	struct cpufreq_stats *stat =NULL;//= per_cpu(cpufreq_stats_table, cpu);
+
+	mutex_lock(&per_cpu(cpufreq_stats_table_lock,cpu));
+	stat = per_cpu(cpufreq_stats_table, cpu);
 	if (stat) {
 		kfree(stat->time_in_state);
 		kfree(stat);
 	}
 	per_cpu(cpufreq_stats_table, cpu) = NULL;
+	mutex_unlock(&per_cpu(cpufreq_stats_table_lock,cpu));
 }
 
 /* must be called early in the CPU removal sequence (before
@@ -215,7 +224,7 @@ static int cpufreq_stats_create_table(struct cpufreq_policy *policy,
 		goto error_out;
 
 	stat->cpu = cpu;
-	per_cpu(cpufreq_stats_table, cpu) = stat;
+	//per_cpu(cpufreq_stats_table, cpu) = stat;
 
 	for (i = 0; table[i].frequency != CPUFREQ_TABLE_END; i++) {
 		unsigned int freq = table[i].frequency;
@@ -260,6 +269,7 @@ static int cpufreq_stats_create_table(struct cpufreq_policy *policy,
 	spin_lock(&cpufreq_stats_lock);
 	stat->last_time = get_jiffies_64();
 	stat->last_index = freq_table_get_index(stat, policy->cur);
+	per_cpu(cpufreq_stats_table, cpu) = stat;
 	spin_unlock(&cpufreq_stats_lock);
 	cpufreq_cpu_put(data);
 	return 0;
@@ -295,20 +305,20 @@ static int cpufreq_stat_notifier_trans(struct notifier_block *nb,
 	struct cpufreq_freqs *freq = data;
 	struct cpufreq_stats *stat;
 	int old_index, new_index;
-
+	mutex_lock(&per_cpu(cpufreq_stats_table_lock,freq->cpu));
 	if (val != CPUFREQ_POSTCHANGE)
-		return 0;
+		goto  fail;
 
 	stat = per_cpu(cpufreq_stats_table, freq->cpu);
 	if (!stat)
-		return 0;
+		goto  fail;
 
 	old_index = stat->last_index;
 	new_index = freq_table_get_index(stat, freq->new);
 
 	cpufreq_stats_update(freq->cpu);
 	if (old_index == new_index)
-		return 0;
+		goto  fail;
 
 	spin_lock(&cpufreq_stats_lock);
 	stat->last_index = new_index;
@@ -318,6 +328,8 @@ static int cpufreq_stat_notifier_trans(struct notifier_block *nb,
 #endif
 	stat->total_trans++;
 	spin_unlock(&cpufreq_stats_lock);
+fail:
+	mutex_unlock(&per_cpu(cpufreq_stats_table_lock,freq->cpu));
 	return 0;
 }
 
@@ -380,6 +392,10 @@ static int __init cpufreq_stats_init(void)
 	register_hotcpu_notifier(&cpufreq_stat_cpu_notifier);
 	for_each_online_cpu(cpu) {
 		cpufreq_update_policy(cpu);
+	}
+	cpu=0;
+	for_each_online_cpu(cpu){
+		mutex_init(&per_cpu(cpufreq_stats_table_lock,cpu));
 	}
 	return 0;
 }
