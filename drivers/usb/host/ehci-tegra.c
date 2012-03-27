@@ -23,7 +23,9 @@
 #include <linux/usb/otg.h>
 #include <mach/usb_phy.h>
 #include <mach/iomap.h>
-
+#include <linux/gpio.h>
+#include <linux/workqueue.h>
+#include <../gpio-names.h>
 #define TEGRA_USB_PORTSC_PHCD		(1 << 23)
 
 #define TEGRA_USB_SUSP_CTRL_OFFSET	0x400
@@ -50,6 +52,12 @@
 #define TEGRA_HSIC_CONNECTION_MAX_RETRIES 5
 #define HOSTPC_REG_OFFSET		0x1b4
 
+//add for usb3 suspend sequence before the asusdec driver suspend
+extern int asusdec_suspend_hub_callback(void);
+static struct usb_hcd *usb3_ehci_handle;
+static struct delayed_work usb3_ehci_dock_in_work;
+static unsigned  int gpio_dock_in_irq = 0;
+static int usb3_init = 0;
 #define HOSTPC1_DEVLC_STS 		(1 << 28)
 #define HOSTPC1_DEVLC_PTS(x)		(((x) & 0x7) << 29)
 
@@ -74,6 +82,60 @@ struct tegra_ehci_hcd {
 	struct mutex tegra_ehci_hcd_mutex;
 	unsigned int irq;
 };
+
+
+static void usb3_ehci_dock_in_work_handler(struct work_struct *w)
+{
+	struct ehci_hcd *ehci = hcd_to_ehci (usb3_ehci_handle);
+
+	printk(KERN_INFO "%s: usb resume root hub\n",__func__);
+	usb_hcd_resume_root_hub(usb3_ehci_handle);
+}
+
+void tegra_usb3_smi_backlight_on_callback(void)
+{
+	int dock_in = 0;
+
+	if(usb3_init == 1) {
+		dock_in  = gpio_get_value(TEGRA_GPIO_PU4);
+		if(dock_in == 0)
+			schedule_delayed_work(&usb3_ehci_dock_in_work,0.5*HZ);
+	}
+}
+EXPORT_SYMBOL( tegra_usb3_smi_backlight_on_callback);
+
+static irqreturn_t gpio_dock_in_irq_handler(struct usb_hcd *hcd)
+{
+	int dock_in = 0;
+	dock_in  = gpio_get_value(TEGRA_GPIO_PU4);
+	if(dock_in == 0)
+		schedule_delayed_work(&usb3_ehci_dock_in_work,0.5*HZ);
+
+	return IRQ_HANDLED;
+}
+
+static void gpio_dock_in_irq_init(struct usb_hcd *hcd)
+{
+	int ret = 0;
+
+	tegra_gpio_enable(TEGRA_GPIO_PU4);
+	ret = gpio_request(TEGRA_GPIO_PU4, "DOCK_IN");
+	if (ret < 0)
+		printk(KERN_ERR "DOCK_IN GPIO%d request fault!%d\n",TEGRA_GPIO_PU4, ret);
+
+	ret= gpio_direction_input(TEGRA_GPIO_PU4);
+	if (ret)
+	        printk(KERN_ERR"gpio_direction_input failed for input TEGRA_GPIO_PU4=%d\n", TEGRA_GPIO_PU4);
+
+	gpio_dock_in_irq = gpio_to_irq(TEGRA_GPIO_PU4);
+	ret = request_irq(gpio_dock_in_irq, gpio_dock_in_irq_handler, IRQF_SHARED|IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING, "usb3_dock_in_irq_handler", hcd);
+	if (ret < 0) {
+		printk(KERN_ERR"%s: Could not request IRQ for the GPIO dock in, irq = %d, ret = %d\n", __func__, gpio_dock_in_irq, ret);
+	}
+	printk(KERN_INFO"%s: request irq = %d, ret = %d\n", __func__, gpio_dock_in_irq, ret);
+
+	INIT_DELAYED_WORK(&usb3_ehci_dock_in_work, usb3_ehci_dock_in_work_handler);
+}
 
 static void tegra_ehci_power_up(struct usb_hcd *hcd, bool is_dpd)
 {
@@ -404,10 +466,17 @@ static void tegra_ehci_restart(struct usb_hcd *hcd, bool is_dpd)
 
 static int tegra_usb_suspend(struct usb_hcd *hcd, bool is_dpd)
 {
-	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
-	struct ehci_regs __iomem *hw = tegra->ehci->regs;
+	struct tegra_ehci_hcd *tegra;
+	struct ehci_regs __iomem *hw;
 	unsigned long flags;
 	int hsic = 0;
+	int ret = 0;
+	pr_info("%s+\n", __func__);
+
+	tegra = dev_get_drvdata(hcd->self.controller);
+	hw = tegra->ehci->regs;
+
+	pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	hsic = (tegra->phy->usb_phy_type == TEGRA_USB_PHY_TYPE_HSIC);
 
@@ -417,7 +486,10 @@ static int tegra_usb_suspend(struct usb_hcd *hcd, bool is_dpd)
 		tegra->port_speed = (readl(hcd->regs + HOSTPC_REG_OFFSET) >> 25) & 0x3;
 	else
 		tegra->port_speed = (readl(&hw->port_status[0]) >> 26) & 0x3;
-	ehci_halt(tegra->ehci);
+
+	pr_info("%s: before ehci_halt\n", __func__);
+	ret = ehci_halt(tegra->ehci);
+	pr_info("%s: after ehci_halt, ret = %d\n", __func__, ret);
 #ifndef CONFIG_ARCH_TEGRA_2x_SOC
 	if (tegra->phy->usb_phy_type == TEGRA_USB_PHY_TYPE_UTMIP) {
 		/*
@@ -433,18 +505,29 @@ static int tegra_usb_suspend(struct usb_hcd *hcd, bool is_dpd)
 	spin_unlock_irqrestore(&tegra->ehci->lock, flags);
 
 	tegra_ehci_power_down(hcd, is_dpd);
+
+	pr_info("%s-\n", __func__);
+
 	return 0;
 }
 
 static int tegra_usb_resume(struct usb_hcd *hcd, bool is_dpd)
 {
-	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
+	struct tegra_ehci_hcd *tegra;
 	struct usb_device *udev = hcd->self.root_hub;
-	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
-	struct ehci_regs __iomem *hw = ehci->regs;
+	struct ehci_hcd	*ehci;
+	struct ehci_regs __iomem *hw;
 	unsigned long val;
 	bool hsic;
 	bool null_ulpi;
+
+        pr_info("%s+\n", __func__);
+
+        tegra = dev_get_drvdata(hcd->self.controller);
+        ehci = hcd_to_ehci(hcd);
+        hw = ehci->regs;
+
+        pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	null_ulpi = (tegra->phy->usb_phy_type == TEGRA_USB_PHY_TYPE_NULL_ULPI);
 	hsic = (tegra->phy->usb_phy_type == TEGRA_USB_PHY_TYPE_HSIC);
@@ -547,6 +630,9 @@ static int tegra_usb_resume(struct usb_hcd *hcd, bool is_dpd)
 	}
 
 	tegra_ehci_phy_restore_end(tegra->phy);
+
+	pr_info("%s-\n", __func__);
+
 	return 0;
 
 restart:
@@ -588,13 +674,21 @@ restart:
 		tegra_ehci_restart(hcd, false);
 	}
 
+	pr_info("%s-\n", __func__);
+
 	return 0;
 }
 #endif
 
 static void tegra_ehci_shutdown(struct usb_hcd *hcd)
 {
-	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
+	struct tegra_ehci_hcd *tegra;
+
+	pr_info("%s+\n", __func__);
+
+	tegra = dev_get_drvdata(hcd->self.controller);
+
+	pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	mutex_lock(&tegra->tegra_ehci_hcd_mutex);
 	/* ehci_shutdown touches the USB controller registers, make sure
@@ -607,6 +701,8 @@ static void tegra_ehci_shutdown(struct usb_hcd *hcd)
 	/* we are ready to shut down, powerdown the phy */
 	tegra_ehci_power_down(hcd, false);
 	mutex_unlock(&tegra->tegra_ehci_hcd_mutex);
+
+	pr_info("%s-\n", __func__);
 }
 
 static int tegra_ehci_setup(struct usb_hcd *hcd)
@@ -938,6 +1034,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	int irq;
 	int instance = pdev->id;
 
+	printk(KERN_INFO "%s+ #####\n", __func__);
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
 		dev_err(&pdev->dev, "Platform data missing\n");
@@ -1044,7 +1141,8 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		goto fail;
 	}
 	set_irq_flags(irq, IRQF_VALID);
-	tegra->irq = irq;
+	/* Mark the related code of wake up for tegra-ehci2 */
+	//tegra->irq = irq;
 
 #ifdef CONFIG_USB_OTG_UTILS
 	if (pdata->operating_mode == TEGRA_USB_OTG) {
@@ -1060,15 +1158,23 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
-	err = enable_irq_wake(tegra->irq);
+	/* Mark the related code of wake up for tegra-ehci2 */
+	/*err = enable_irq_wake(tegra->irq);
 	if (err < 0) {
 		dev_warn(&pdev->dev,
 			"Couldn't enable USB host mode wakeup, irq=%d, "
 			"error=%d\n", tegra->irq, err);
 		err = 0;
 		tegra->irq = 0;
+	}*/
+
+	if (instance == 2){
+		usb3_ehci_handle = hcd;
+		gpio_dock_in_irq_init(hcd);
+		usb3_init = 1;
 	}
 
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return err;
 
 fail:
@@ -1101,32 +1207,60 @@ fail_hcd:
 #ifdef CONFIG_PM
 static int tegra_ehci_resume(struct platform_device *pdev)
 {
-	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
-	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
+	struct tegra_ehci_hcd *tegra;
+	struct usb_hcd *hcd;
+	int ret;
+
+	pr_info("%s+\n", __func__);
+
+	tegra = platform_get_drvdata(pdev);
+	hcd = ehci_to_hcd(tegra->ehci);
+
+	pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
 #ifdef CONFIG_USB_HOTPLUG
 		clk_enable(tegra->clk);
 #endif
+		pr_info("%s-\n", __func__);
 		return 0;
 	}
 
 #ifdef CONFIG_USB_HOTPLUG
 	clk_enable(tegra->clk);
 #endif
-	return tegra_usb_resume(hcd, true);
+
+	ret = tegra_usb_resume(hcd, true);
+
+	pr_info("%s-\n", __func__);
+
+	return ret;
 }
 
 static int tegra_ehci_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
-	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
+	struct tegra_ehci_hcd *tegra;
+	struct usb_hcd *hcd;
 	int ret;
+
+        pr_info("%s+\n", __func__);
+
+        tegra = platform_get_drvdata(pdev);
+        hcd = ehci_to_hcd(tegra->ehci);
+
+        pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	if ((tegra->bus_suspended) && (tegra->power_down_on_bus_suspend)) {
 #ifdef CONFIG_USB_HOTPLUG
 		clk_disable(tegra->clk);
 #endif
+		//add for usb3 suspend sequence before the asusec driver suspend
+		if (tegra->phy->instance == 2) {
+			printk(KERN_INFO"asusec suspend\n");
+			asusdec_suspend_hub_callback();
+		}
+
+		pr_info("%s-\n", __func__);
 		return 0;
 	}
 
@@ -1137,6 +1271,14 @@ static int tegra_ehci_suspend(struct platform_device *pdev, pm_message_t state)
 #ifdef CONFIG_USB_HOTPLUG
 	clk_disable(tegra->clk);
 #endif
+	//add for usb3 suspend sequence before the asusec driver suspend
+	if (tegra->phy->instance == 2) {
+		printk(KERN_INFO"asusec suspend\n");
+		asusdec_suspend_hub_callback();
+	}
+
+	pr_info("%s-\n", __func__);
+
 	return ret;
 }
 #endif
@@ -1148,6 +1290,12 @@ static int tegra_ehci_remove(struct platform_device *pdev)
 
 	if (tegra == NULL || hcd == NULL)
 		return -EINVAL;
+
+	if (tegra->phy->instance == 2) {
+		free_irq(gpio_dock_in_irq, hcd);
+		gpio_free(TEGRA_GPIO_PU4);
+	}
+
 	/* make sure controller is on as we will touch its registers */
 	if (!tegra->host_resumed)
 		tegra_ehci_power_up(hcd, true);
@@ -1162,8 +1310,9 @@ static int tegra_ehci_remove(struct platform_device *pdev)
 	/* Turn Off Interrupts */
 	ehci_writel(tegra->ehci, 0, &tegra->ehci->regs->intr_enable);
 	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
-	if (tegra->irq)
-		disable_irq_wake(tegra->irq);
+	/* Mark the related code of wake up for tegra-ehci2 */
+	/*if (tegra->irq)
+		disable_irq_wake(tegra->irq);*/
 	usb_remove_hcd(hcd);
 	usb_put_hcd(hcd);
 	cancel_delayed_work(&tegra->work);
@@ -1189,11 +1338,20 @@ static int tegra_ehci_remove(struct platform_device *pdev)
 
 static void tegra_ehci_hcd_shutdown(struct platform_device *pdev)
 {
-	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
-	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
+	struct tegra_ehci_hcd *tegra;
+	struct usb_hcd *hcd;
+
+	pr_info("%s+\n", __func__);
+
+	tegra = platform_get_drvdata(pdev);
+	hcd = ehci_to_hcd(tegra->ehci);
+
+	pr_info("tegra->phy->instance=%d\n", tegra->phy->instance);
 
 	if (hcd->driver->shutdown)
 		hcd->driver->shutdown(hcd);
+
+	pr_info("%s-\n", __func__);
 }
 
 static struct platform_driver tegra_ehci_driver = {
