@@ -241,6 +241,12 @@ config CHARGER_GPIO
 	  This driver can be build as a module. If so, the module will be
 	  called gpio-charger.
 
+config BATTERY_PAD
+	tristate "PAD battery driver"
+	depends on I2C
+	help
+	  Say Y here to enable support for batteries with BQ20Z45 chip.
+
 endif # POWER_SUPPLY
 
 config TEGRA_BPC_MGMT
