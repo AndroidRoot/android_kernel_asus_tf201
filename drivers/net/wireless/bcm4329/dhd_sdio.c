@@ -69,9 +69,9 @@
 #include <hndrte_armtrap.h>
 #endif /* DHD_DEBUG_TRAP */
 
-#define QLEN		2048	/* bulk rx and tx queue lengths */
-#define FCHI		(QLEN - 256)
-#define FCLOW		(FCHI -256)
+#define QLEN		256	/* bulk rx and tx queue lengths */
+#define FCHI		(QLEN - 10)
+#define FCLOW		(FCHI / 2)
 #define PRIOMASK	7
 
 #define TXRETRIES	2	/* # of retries for tx frames */
@@ -345,7 +345,7 @@ static const uint firstread = DHD_FIRSTREAD;
 #define HDATLEN (firstread - (SDPCM_HDRLEN))
 
 /* Retry count for register access failures */
-static const uint retry_limit = 2;
+static const uint retry_limit = 20;
 
 /* Force even SD lengths (some host controllers mess up on odd bytes) */
 static bool forcealign;
@@ -391,6 +391,8 @@ do { \
 	do { \
 		regvar = R_REG(bus->dhd->osh, regaddr); \
 	} while (bcmsdh_regfail(bus->sdh) && (++retryvar <= retry_limit)); \
+	if(retryvar > 1)  \
+		DHD_ERROR(("%s: regvar[ %d ], retryvar[ %d ], regfails[ %d ], bcmsdh_regfail[ %d ] \n",__FUNCTION__,regvar, retryvar ,bus->regfails, bcmsdh_regfail(bus->sdh))); \
 	if (retryvar) { \
 		bus->regfails += (retryvar-1); \
 		if (retryvar > retry_limit) { \
@@ -1285,8 +1287,7 @@ dhd_bus_txctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 			DHD_INFO(("%s: ctrl_frame_stat == FALSE\n", __FUNCTION__));
 			ret = 0;
 		} else {
-			if (!bus->dhd->hang_was_sent)
-				DHD_ERROR(("%s: ctrl_frame_stat == TRUE\n", __FUNCTION__));
+			DHD_INFO(("%s: ctrl_frame_stat == TRUE\n", __FUNCTION__));
 			ret = -1;
 		}
 	}
@@ -4788,7 +4789,7 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 	sd1idle = TRUE;
 	dhd_readahead = TRUE;
 	retrydata = FALSE;
-	dhd_doflow = TRUE;
+	dhd_doflow = FALSE;
 	dhd_dongle_memsize = 0;
 	dhd_txminmax = DHD_TXMINMAX;
 

@@ -345,7 +345,7 @@ static const uint firstread = DHD_FIRSTREAD;
 #define HDATLEN (firstread - (SDPCM_HDRLEN))
 
 /* Retry count for register access failures */
-static const uint retry_limit = 2;
+static const uint retry_limit = 20;
 
 /* Force even SD lengths (some host controllers mess up on odd bytes) */
 static bool forcealign;
@@ -398,6 +398,8 @@ do { \
 	do { \
 		regvar = R_REG(bus->dhd->osh, regaddr); \
 	} while (bcmsdh_regfail(bus->sdh) && (++retryvar <= retry_limit)); \
+	if(retryvar > 1)  \
+		DHD_ERROR(("%s: regvar[ %d ], retryvar[ %d ], regfails[ %d ], bcmsdh_regfail[ %d ] \n",__FUNCTION__,regvar, retryvar ,bus->regfails, bcmsdh_regfail(bus->sdh))); \
 	if (retryvar) { \
 		bus->regfails += (retryvar-1); \
 		if (retryvar > retry_limit) { \
@@ -506,6 +508,8 @@ static int dhdsdio_download_code_array(dhd_bus_t *bus);
 #include <htsf.h>
 extern uint32 dhd_get_htsf(void *dhd, int ifidx);
 #endif /* WLMEDIA_HTSF */
+
+extern int chip_is_b1;
 
 static void
 dhd_dongle_setmemsize(struct dhd_bus *bus, int mem_size)
@@ -6053,6 +6057,7 @@ _dhdsdio_download_firmware(struct dhd_bus *bus)
 	bool embed = FALSE;	/* download embedded firmware */
 	bool dlok = FALSE;	/* download firmware succeeded */
 
+	printf("%s: fw_path = %s, nv_path=%s\n", __FUNCTION__, bus->fw_path, bus->nv_path);
 	/* Out immediately if no image to download */
 	if ((bus->fw_path == NULL) || (bus->fw_path[0] == '\0')) {
 #ifdef BCMEMBEDIMAGE
@@ -6081,6 +6086,10 @@ _dhdsdio_download_firmware(struct dhd_bus *bus)
 				*(p + 5)='3';
 				*(p + 6)='0';
 			}
+		}
+
+		if(chip_is_b1){
+			strcpy(bus->fw_path, "/system/vendor/firmware/bcm4330/fw_bcmdhd_b1.bin");
 		}
 
 		if (dhdsdio_download_code_file(bus, bus->fw_path)) {
@@ -6193,6 +6202,12 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 			/* Force flow control as protection when stop come before ifconfig_down */
 			dhd_txflowcontrol(bus->dhd, ALL_INTERFACES, ON);
 #endif /* !defined(IGNORE_ETH0_DOWN) */
+
+#if !defined(OOB_INTR_ONLY)
+			/* to avoid supurious client interrupt during stop process */
+			bcmsdh_stop(bus->sdh);
+#endif /* !defined(OOB_INTR_ONLY) */
+
 			/* Expect app to have torn down any connection before calling */
 			/* Stop the bus, disable F2 */
 			dhd_bus_stop(bus, FALSE);

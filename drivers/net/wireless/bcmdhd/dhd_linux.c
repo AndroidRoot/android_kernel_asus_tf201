@@ -523,7 +523,6 @@ static void dhd_set_packet_filter(int value, dhd_pub_t *dhd)
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
-	int power_mode = PM_MAX;
 	/* wl_pkt_filter_enable_t	enable_parm; */
 	char iovbuf[32];
 	int bcn_li_dtim = 3;
@@ -534,12 +533,9 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 
 	if (dhd && dhd->up) {
 		if (value && dhd->in_suspend) {
-
+				printf("Wi-Fi early-suspend+\n");
 				/* Kernel suspended */
 				DHD_ERROR(("%s: force extra Suspend setting \n", __FUNCTION__));
-
-				dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode,
-				                 sizeof(power_mode), TRUE, 0);
 
 				/* Enable packet filter, only allow unicast packet to send up */
 				dhd_set_packet_filter(1, dhd);
@@ -557,14 +553,11 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				bcm_mkiovar("roam_off", (char *)&roamvar, 4,
 					iovbuf, sizeof(iovbuf));
 				dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+				printf("Wi-Fi early-suspend-\n");
 			} else {
-
+				printf("Wi-Fi late-resume+\n");
 				/* Kernel resumed  */
 				DHD_TRACE(("%s: Remove extra suspend setting \n", __FUNCTION__));
-
-				power_mode = PM_FAST;
-				dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)&power_mode,
-				                 sizeof(power_mode), TRUE, 0);
 
 				/* disable pkt filter */
 				dhd_set_packet_filter(0, dhd);
@@ -578,6 +571,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				bcm_mkiovar("roam_off", (char *)&roamvar, 4, iovbuf,
 					sizeof(iovbuf));
 				dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, iovbuf, sizeof(iovbuf), TRUE, 0);
+				printf("Wi-Fi late-resume-\n");
 			}
 	}
 
@@ -2105,10 +2099,12 @@ dhd_ioctl_entry(struct net_device *net, struct ifreq *ifr, int cmd)
 		goto done;
 	}
 
+#if 0 // Disable Permission Checking for Wi-Fi RF Test Program
 	if (!capable(CAP_NET_ADMIN)) {
 		bcmerror = -BCME_EPERM;
 		goto done;
 	}
+#endif
 
 	/* check for local dhd ioctl and handle it */
 	if (driver == DHD_IOCTL_MAGIC) {
@@ -2924,11 +2920,11 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 		dhd_pkt_filter_enable = TRUE;
 	}
 
-	DHD_ERROR(("Firmware up: op_mode=%d, "
+	printf("Firmware up: op_mode=%d, "
 			"Broadcom Dongle Host Driver mac=%.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n",
 			dhd->op_mode,
 			dhd->mac.octet[0], dhd->mac.octet[1], dhd->mac.octet[2],
-			dhd->mac.octet[3], dhd->mac.octet[4], dhd->mac.octet[5]));
+			dhd->mac.octet[3], dhd->mac.octet[4], dhd->mac.octet[5]);
 
 	/* Set Country code  */
 	if (dhd->dhd_cspec.ccode[0] != 0) {

@@ -66,6 +66,9 @@
 #include <linux/wlan_plat.h>
 static struct wifi_platform_data *wifi_control_data = NULL;
 #endif
+
+int error_count = 0;
+
 struct semaphore wifi_control_sem;
 
 static struct resource *wifi_irqres = NULL;
@@ -85,7 +88,7 @@ int wifi_get_irq_number(unsigned long *irq_flags_ptr)
 
 int wifi_set_carddetect(int on)
 {
-	printk("%s = %d\n", __FUNCTION__, on);
+	printf("%s = %d\n", __FUNCTION__, on);
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	if (wifi_control_data && wifi_control_data->set_carddetect) {
 		wifi_control_data->set_carddetect(on);
@@ -96,7 +99,7 @@ int wifi_set_carddetect(int on)
 
 int wifi_set_power(int on, unsigned long msec)
 {
-	printk("%s = %d\n", __FUNCTION__, on);
+	printf("%s = %d\n", __FUNCTION__, on);
 #ifdef CONFIG_WIFI_CONTROL_FUNC
 	if (wifi_control_data && wifi_control_data->set_power) {
 		wifi_control_data->set_power(on);
@@ -178,9 +181,9 @@ static int wifi_remove(struct platform_device *pdev)
 	wifi_set_carddetect(0);	/* CardDetect (1->0) */
 
 	up(&wifi_control_sem);
+	mdelay(500);
 	return 0;
 }
-
 static int wifi_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	DHD_TRACE(("##> %s\n", __FUNCTION__));
@@ -319,6 +322,7 @@ typedef struct dhd_info {
 	int wl_count;
 	int wl_packet;
 
+	int hang_was_sent; /* flag that message was send at least once */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
 	struct mutex wl_start_lock; /* mutex when START called to prevent any other Linux calls */
 #endif
@@ -348,7 +352,7 @@ struct semaphore dhd_registration_sem;
 #define DHD_REGISTRATION_TIMEOUT  24000  /* msec : allowed time to finished dhd registration */
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) */
 /* load firmware and/or nvram values from the filesystem */
-module_param_string(firmware_path, firmware_path, MOD_PARAM_PATHLEN, 0);
+module_param_string(firmware_path, firmware_path, MOD_PARAM_PATHLEN, 0644);
 module_param_string(nvram_path, nvram_path, MOD_PARAM_PATHLEN, 0);
 
 /* Error bits */
@@ -564,7 +568,7 @@ static void dhd_set_packet_filter(int value, dhd_pub_t *dhd)
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
-	int power_mode = PM_MAX;
+	int power_mode = PM_FAST;
 	/* wl_pkt_filter_enable_t	enable_parm; */
 	char iovbuf[32];
 	int bcn_li_dtim = 3;
@@ -577,7 +581,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 
 	if (dhd && dhd->up) {
 		if (value && dhd->in_suspend) {
-
+			printf("Wi-Fi early-suspend+\n");
 			/* Kernel suspended */
 			DHD_TRACE(("%s: force extra Suspend setting \n", __FUNCTION__));
 
@@ -600,9 +604,9 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 			bcm_mkiovar("roam_off", (char *)&roamvar, 4, iovbuf, sizeof(iovbuf));
 			dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 #endif /* CUSTOMER_HW2 */
-
+			printf("Wi-Fi early-suspend-\n");
 		} else {
-
+			printf("Wi-Fi late-resume+\n");
 			/* Kernel resumed  */
 			DHD_TRACE(("%s: Remove extra suspend setting \n", __FUNCTION__));
 
@@ -623,6 +627,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 			bcm_mkiovar("roam_off", (char *)&roamvar, 4, iovbuf, sizeof(iovbuf));
 			dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 #endif /* CUSTOMER_HW2 */
+			printf("Wi-Fi late-resume-\n");
 		}
 	}
 
@@ -1777,14 +1782,6 @@ dhd_ioctl_entry(struct net_device *net, struct ifreq *ifr, int cmd)
 
 	dhd_os_wake_lock(&dhd->pub);
 
-	/* send to dongle only if we are not waiting for reload already */
-	if (dhd->pub.hang_was_sent) {
-		DHD_ERROR(("%s: HANG was sent up earlier\n", __FUNCTION__));
-		dhd_os_wake_lock_timeout_enable(&dhd->pub);
-		dhd_os_wake_unlock(&dhd->pub);
-		return OSL_ERROR(BCME_DONGLE_DOWN);
-	}
-
 	ifidx = dhd_net2idx(dhd, net);
 	DHD_TRACE(("%s: ifidx %d, cmd 0x%04x\n", __FUNCTION__, ifidx, cmd));
 
@@ -1852,10 +1849,12 @@ dhd_ioctl_entry(struct net_device *net, struct ifreq *ifr, int cmd)
 		goto done;
 	}
 
+#if 0 // Disable Permission Checking for Wi-Fi RF Test Program
 	if (!capable(CAP_NET_ADMIN)) {
 		bcmerror = -BCME_EPERM;
 		goto done;
 	}
+#endif
 
 	/* check for local dhd ioctl and handle it */
 	if (driver == DHD_IOCTL_MAGIC) {
@@ -1890,12 +1889,23 @@ dhd_ioctl_entry(struct net_device *net, struct ifreq *ifr, int cmd)
 	}
 
 	bcmerror = dhd_prot_ioctl(&dhd->pub, ifidx, (wl_ioctl_t *)&ioc, buf, buflen);
+	if (bcmerror == -ETIMEDOUT){
+		printf("%s: Event timeout, retry again.\n", __FUNCTION__);
+		bcmerror = dhd_prot_ioctl(&dhd->pub, ifidx, (wl_ioctl_t *)&ioc, buf, buflen);
+	}
 
 done:
 	if ((bcmerror == -ETIMEDOUT) || ((dhd->pub.busstate == DHD_BUS_DOWN) &&
 			(!dhd->pub.dongle_reset))) {
-		DHD_ERROR(("%s: Event HANG send up\n", __FUNCTION__));
-		net_os_send_hang_message(net);
+		error_count++;
+		printf("%s: bcmerror = %d, error_count = %d\n", __FUNCTION__,bcmerror,error_count);
+		if(error_count > 3){
+			printf("%s: Event HANG send up\n", __FUNCTION__);
+			net_os_send_hang_message(net);
+			error_count = 0;
+		}
+	}else{
+		error_count = 0;
 	}
 
 	if (!bcmerror && buf && ioc.buf) {
@@ -1928,7 +1938,7 @@ dhd_stop(struct net_device *net)
 #else
 	DHD_ERROR(("BYPASS %s:due to BRCM compilation : under investigation ...\n", __FUNCTION__));
 #endif /* !defined(IGNORE_ETH0_DOWN) */
-	dhd->pub.hang_was_sent = 0;
+
 	OLD_MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -1948,9 +1958,8 @@ dhd_open(struct net_device *net)
 	ifidx = dhd_net2idx(dhd, net);
 	DHD_TRACE(("%s: ifidx %d\n", __FUNCTION__, ifidx));
 
-	if (ifidx == DHD_BAD_IF)
+	if(ifidx < 0)
 		return -1;
-
 	if ((dhd->iflist[ifidx]) && (dhd->iflist[ifidx]->state == WLC_E_IF_DEL)) {
 		DHD_ERROR(("%s: Error: called when IF already deleted\n", __FUNCTION__));
 		return -1;
@@ -2315,12 +2324,9 @@ dhd_bus_start(dhd_pub_t *dhdp)
 /* enable dongle roaming event */
 	setbit(dhdp->eventmask, WLC_E_ROAM);
 
-	dhdp->pktfilter_count = 4;
+	dhdp->pktfilter_count = 1;
 	/* Setup filter to allow only unicast */
 	dhdp->pktfilter[0] = "100 0 0 0 0x01 0x00";
-	dhdp->pktfilter[1] = NULL;
-	dhdp->pktfilter[2] = NULL;
-	dhdp->pktfilter[3] = NULL;
 #endif /* EMBEDDED_PLATFORM */
 
 	/* Bus is ready, do any protocol initialization */
@@ -3095,35 +3101,6 @@ int net_os_set_dtim_skip(struct net_device *dev, int val)
 	return 0;
 }
 
-int net_os_rxfilter_add_remove(struct net_device *dev, int add_remove, int num)
-{
-	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
-	char *filterp = NULL;
-	int ret = 0;
-
-	if (!dhd || (num == DHD_UNICAST_FILTER_NUM))
-		return ret;
-	if (num >= dhd->pub.pktfilter_count)
-		return -EINVAL;
-	if (add_remove) {
-		switch (num) {
-		case DHD_BROADCAST_FILTER_NUM:
-			filterp = "101 0 0 0 0xFFFFFFFFFFFF 0xFFFFFFFFFFFF";
-			break;
-		case DHD_MULTICAST4_FILTER_NUM:
-			filterp = "102 0 0 0 0xFFFFFF 0x01005E";
-			break;
-		case DHD_MULTICAST6_FILTER_NUM:
-			filterp = "103 0 0 0 0xFFFF 0x3333";
-			break;
-		default:
-			return -EINVAL;
-		}
-	}
-	dhd->pub.pktfilter[num] = filterp;
-	return ret;
-}
-
 int net_os_set_packet_filter(struct net_device *dev, int val)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);
@@ -3202,8 +3179,8 @@ int net_os_send_hang_message(struct net_device *dev)
 	int ret = 0;
 
 	if (dhd) {
-		if (!dhd->pub.hang_was_sent) {
-			dhd->pub.hang_was_sent = 1;
+		if (!dhd->hang_was_sent) {
+			dhd->hang_was_sent = 1;
 			ret = wl_iw_send_priv_event(dev, "HANG");
 		}
 	}
@@ -3328,7 +3305,7 @@ int dhd_os_wake_lock_timeout(dhd_pub_t *pub)
 		dhd->wl_packet = 0;
 		spin_unlock_irqrestore(&dhd->wl_lock, flags);
 	}
-	/* printk("%s: %d\n", __FUNCTION__, ret); */
+	/* printf("%s: %d\n", __FUNCTION__, ret); */
 	return ret;
 }
 
@@ -3352,7 +3329,7 @@ int dhd_os_wake_lock_timeout_enable(dhd_pub_t *pub)
 		dhd->wl_packet = 1;
 		spin_unlock_irqrestore(&dhd->wl_lock, flags);
 	}
-	/* printk("%s\n",__func__); */
+	/* printf("%s\n",__func__); */
 	return 0;
 }
 
@@ -3382,7 +3359,7 @@ int dhd_os_wake_lock(dhd_pub_t *pub)
 		ret = dhd->wl_count;
 		spin_unlock_irqrestore(&dhd->wl_lock, flags);
 	}
-	/* printk("%s: %d\n", __FUNCTION__, ret); */
+	/* printf("%s: %d\n", __FUNCTION__, ret); */
 	return ret;
 }
 
@@ -3415,7 +3392,7 @@ int dhd_os_wake_unlock(dhd_pub_t *pub)
 		}
 		spin_unlock_irqrestore(&dhd->wl_lock, flags);
 	}
-	/* printk("%s: %d\n", __FUNCTION__, ret); */
+	/* printf("%s: %d\n", __FUNCTION__, ret); */
 	return ret;
 }
 
