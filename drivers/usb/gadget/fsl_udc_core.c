@@ -50,6 +50,8 @@
 #include <asm/unaligned.h>
 #include <asm/dma.h>
 
+#include <linux/gpio.h>
+#include <../gpio-names.h>
 #include "fsl_usb2_udc.h"
 
 #ifdef CONFIG_ARCH_TEGRA
@@ -74,7 +76,7 @@ static struct usb_dr_device *dr_regs;
 #ifndef CONFIG_ARCH_MXC
 static struct usb_sys_interface *usb_sys_regs;
 #endif
-
+extern int usb_function_enable;
 /* Charger current limit=1800mA, as per the USB charger spec */
 #define USB_CHARGING_CURRENT_LIMIT_MA 1800
 /* 1 sec wait time for charger detection after vbus is detected */
@@ -82,6 +84,48 @@ static struct usb_sys_interface *usb_sys_regs;
 
 /* it is initialized in probe()  */
 static struct fsl_udc *udc_controller = NULL;
+/* Enable or disable the callback for the other driver. */
+#define BATTERY_CALLBACK_ENABLED 1
+#define TOUCH_CALLBACK_ENABLED 1
+#define DOCK_EC_ENABLED 1
+
+static int gpio_limit_set1_irq;
+
+struct cable_info {
+	/*
+	* The cable status:
+	* 0000: no cable
+	* 0001: USB cable
+	* 0011: AC apdater
+	*/
+	unsigned int cable_status;
+	int is_active;
+	int udc_vbus_active;
+	int ac_connected;
+	int ac_15v_connected;
+	struct delayed_work cable_detection_work;
+	struct mutex cable_info_mutex;
+};
+
+static struct cable_info s_cable_info;
+
+#if BATTERY_CALLBACK_ENABLED
+extern void battery_callback(unsigned cable_status);
+#endif
+#if TOUCH_CALLBACK_ENABLED
+extern void touch_callback(unsigned cable_status);
+#endif
+#if DOCK_EC_ENABLED
+extern int asusdec_is_ac_over_10v_callback(void);
+#endif
+
+/* Export the function "unsigned int get_usb_cable_status(void)" for others to query the USB cable status. */
+unsigned int get_usb_cable_status(void)
+{
+	printk(KERN_INFO "The USB cable status = %x\n", s_cable_info.cable_status);
+	return s_cable_info.cable_status;
+}
+EXPORT_SYMBOL( get_usb_cable_status);
 
 static const struct usb_endpoint_descriptor
 fsl_ep0_desc = {
@@ -122,6 +166,250 @@ static const u8 fsl_udc_test_packet[53] = {
 	/* JKKKKKKK x10, JK */
 	0xfc, 0x7e, 0xbf, 0xdf, 0xef, 0xf7, 0xfb, 0xfd, 0x7e
 };
+
+/*
+ * add for GPIO LIMIT_SET0 set
+ * USB Cable -> LIMIT_SET0 = 0
+ * AC adaptor -> LIMIT_SET0 = 1
+ */
+static void gpio_limit_set0_set(int enable)
+{
+	int ret = 0;
+
+	ret = gpio_direction_output(TEGRA_GPIO_PR1, enable);
+	if (ret < 0)
+		printk(KERN_ERR "Failed to set the GPIO%d to the status(%d): %d\n", TEGRA_GPIO_PR1, enable, ret);
+
+}
+
+static void cable_detection_work_handler(struct work_struct *w)
+{
+	int	dock_in = 0;
+	int	adapter_in = 0;
+	int	dock_ac = 0;
+	static int	ask_ec_num = 0;
+
+	mutex_lock(&s_cable_info.cable_info_mutex);
+	s_cable_info.cable_status &= (0<<3|0<<2|0<<1|0<<0); //0000
+	printk(KERN_INFO "%s, vbus_active=%d, is_active=%d\n", __func__, s_cable_info.udc_vbus_active, s_cable_info.is_active);
+
+	if (s_cable_info.udc_vbus_active && !s_cable_info.is_active) {
+		if(!s_cable_info.ac_connected)
+			printk(KERN_INFO "The USB cable is disconnected.\n");
+		else
+			printk(KERN_INFO "The AC adapter is disconnected.\n");
+
+		s_cable_info.ac_connected = 0;
+		s_cable_info.ac_15v_connected = 0;
+		gpio_limit_set0_set(0);
+#if BATTERY_CALLBACK_ENABLED
+		battery_callback(s_cable_info.cable_status);
+#endif
+#if TOUCH_CALLBACK_ENABLED
+		touch_callback(s_cable_info.cable_status);
+#endif
+
+	} else if (!s_cable_info.udc_vbus_active && s_cable_info.is_active) {
+		switch (fsl_readl(&dr_regs->portsc1) & PORTSCX_LINE_STATUS_BITS) {
+			case PORTSCX_LINE_STATUS_SE0:
+				s_cable_info.ac_connected = 0; break;
+			case PORTSCX_LINE_STATUS_JSTATE:
+				s_cable_info.ac_connected = 0; break;
+			case PORTSCX_LINE_STATUS_KSTATE:
+				s_cable_info.ac_connected = 0; break;
+			case PORTSCX_LINE_STATUS_UNDEF:
+				s_cable_info.ac_connected = 1; break;
+			default:
+				s_cable_info.ac_connected = 0; break;
+		}
+
+		dock_in = gpio_get_value(TEGRA_GPIO_PU4);
+		adapter_in = gpio_get_value(TEGRA_GPIO_PH5);
+
+		if(!s_cable_info.ac_connected) {
+			if(adapter_in == 0) {
+				printk(KERN_INFO "The USB cable is connected (0.5A)\n");
+				s_cable_info.cable_status |= 1<<0; //0001
+				s_cable_info.ac_15v_connected = 0;
+				gpio_limit_set0_set(0);
+			}
+			else if(adapter_in == 1) {
+				printk(KERN_INFO "USB cable + AC adapter 15V connect (1A)\n");
+				s_cable_info.cable_status |= 1<<1|1<<0; //0011
+				s_cable_info.ac_15v_connected = 1;
+				gpio_limit_set0_set(1);
+			}
+			else{
+				printk(KERN_INFO "unknown status\n");
+				s_cable_info.cable_status |= 1<<0; //0001
+				s_cable_info.ac_15v_connected = 0;
+				gpio_limit_set0_set(0);
+			}
+		}
+		else{
+			if(dock_in == 1) {//no dock in
+				if(adapter_in == 1) {
+					printk(KERN_INFO "AC adapter 15V connect (1A)\n");
+					s_cable_info.cable_status |= 1<<1|1<<0; //0011
+					s_cable_info.ac_15v_connected = 1;
+				}else if(adapter_in == 0) {
+					printk(KERN_INFO "AC adapter 5V connect (1A)\n");
+					s_cable_info.cable_status |= 1<<0; //0001
+					s_cable_info.ac_15v_connected = 0;
+				}else{
+					printk(KERN_ERR "No define adapter status\n");
+					s_cable_info.cable_status |= 1<<0; //0001
+					s_cable_info.ac_15v_connected = 0;
+				}
+			}else if(dock_in == 0) {// dock in
+				#if DOCK_EC_ENABLED
+				dock_ac = asusdec_is_ac_over_10v_callback();
+				#endif
+
+				if(dock_ac == 0x20) {
+					printk(KERN_INFO "AC adapter + Docking 15V connect (1A)\n");
+					s_cable_info.cable_status |= 1<<1|1<<0; //0011
+					s_cable_info.ac_15v_connected = 1;
+					ask_ec_num = 0;
+				}else if(dock_ac == 0) {
+					printk(KERN_INFO "AC adapter + Docking 5V connect (1A)\n");
+					s_cable_info.cable_status |= 1<<0; //0001
+					s_cable_info.ac_15v_connected = 0;
+					ask_ec_num = 0;
+				}else{
+					if(ask_ec_num < 3) {
+						ask_ec_num ++;
+						printk(KERN_INFO "%s dock_ac = %d ask_ec_num = %d\n", __func__, dock_ac, ask_ec_num);
+						s_cable_info.cable_status |= 1<<0; //0001
+						s_cable_info.ac_15v_connected = 0;
+						schedule_delayed_work(&s_cable_info.cable_detection_work, 0.5*HZ);
+					}
+					else{
+						printk(KERN_INFO "unknown status\n");
+						if(adapter_in == 1) {
+							printk(KERN_INFO "LIMIT SET1: 15V connect (1A)\n");
+							s_cable_info.cable_status |= 1<<1|1<<0; //0011
+							s_cable_info.ac_15v_connected = 1;
+						}else if(adapter_in == 0) {
+							printk(KERN_INFO "LIMIT SET1: 5V connect (1A)\n");
+							s_cable_info.cable_status |= 1<<0; //0001
+							s_cable_info.ac_15v_connected = 0;
+						}else{
+							printk(KERN_ERR "LIMIT SET1 error status\n");
+							s_cable_info.cable_status |= 1<<0; //0001
+							s_cable_info.ac_15v_connected = 0;
+						}
+						ask_ec_num = 0;
+					}
+				}
+			}
+			else{
+				printk(KERN_ERR "No define the USB status\n");
+			}
+
+			gpio_limit_set0_set(1);
+		}
+#if BATTERY_CALLBACK_ENABLED
+		battery_callback(s_cable_info.cable_status);
+#endif
+#if TOUCH_CALLBACK_ENABLED
+		touch_callback(s_cable_info.cable_status);
+#endif
+
+	}
+	mutex_unlock(&s_cable_info.cable_info_mutex);
+}
+
+static void charging_gpios_init(void)
+{
+	int ret = 0;
+
+	tegra_gpio_enable(TEGRA_GPIO_PH5);
+	tegra_gpio_enable(TEGRA_GPIO_PR1);
+	tegra_gpio_enable(TEGRA_GPIO_PU4);
+
+	ret = gpio_request(TEGRA_GPIO_PR1, "LIMIT_SET0");
+	if (ret < 0)
+		printk(KERN_ERR "Failed to request the GPIO%d: %d\n", TEGRA_GPIO_PR1, ret);
+
+	ret = gpio_request(TEGRA_GPIO_PH5, "LIMIT_SET1");
+	if (ret < 0)
+		printk(KERN_ERR "LIMIT_SET1 GPIO%d request fault!%d\n",TEGRA_GPIO_PH5, ret);
+
+	ret = gpio_direction_input(TEGRA_GPIO_PH5);
+	if (ret)
+		printk(KERN_ERR "gpio_direction_input failed for input %d\n", TEGRA_GPIO_PH5);
+
+	ret = gpio_request(TEGRA_GPIO_PU4, "DOCK_IN");
+	if (ret < 0)
+		printk(KERN_ERR "DOCK_IN GPIO%d request fault!%d\n",TEGRA_GPIO_PU4, ret);
+
+	ret = gpio_direction_input(TEGRA_GPIO_PU4);
+	if (ret)
+		printk(KERN_ERR "gpio_direction_input failed for input %d\n", TEGRA_GPIO_PU4);
+
+	gpio_limit_set0_set(0);
+}
+
+static void charging_gpios_free(void)
+{
+	gpio_free(TEGRA_GPIO_PH5);
+	gpio_free(TEGRA_GPIO_PR1);
+	gpio_free(TEGRA_GPIO_PU4);
+}
+
+static void cable_status_init(void)
+{
+	mutex_init(&s_cable_info.cable_info_mutex);
+	s_cable_info.cable_status = 0x0;
+	s_cable_info.is_active = 0;
+	s_cable_info.udc_vbus_active = 0;
+	s_cable_info.ac_connected = 0;
+	s_cable_info.ac_15v_connected = 0;
+	INIT_DELAYED_WORK(&s_cable_info.cable_detection_work, cable_detection_work_handler);
+}
+
+//For the issue of USB AC adaptor inserted half on PAD+Docking
+void fsl_dock_ec_callback(void)
+{
+	int dock_in = 0;
+
+	dock_in = gpio_get_value(TEGRA_GPIO_PU4);
+	printk(KERN_INFO "%s cable_status=%d\n", __func__, s_cable_info.cable_status);
+	if(dock_in == 0 && (s_cable_info.cable_status != 0)) {//dock in
+		schedule_delayed_work(&s_cable_info.cable_detection_work, 0*HZ);
+	}
+}
+EXPORT_SYMBOL(fsl_dock_ec_callback);
+
+//For the issue of USB AC adaptor inserted half on PAD
+static irqreturn_t gpio_limit_set1_irq_handler(int irq, void *dev_id)
+{
+	int adapter_in = 0;
+	int dock_in = 0;
+
+	adapter_in = gpio_get_value(TEGRA_GPIO_PH5);
+	dock_in = gpio_get_value(TEGRA_GPIO_PU4);
+
+	printk(KERN_INFO "%s gpio_limit_set1=%d, ac_15v_connected=%d\n", __func__, adapter_in, s_cable_info.ac_15v_connected);
+
+	if(dock_in == 1 && (adapter_in != s_cable_info.ac_15v_connected)) {//no dock in
+		schedule_delayed_work(&s_cable_info.cable_detection_work, 0.2*HZ);
+	}
+	return IRQ_HANDLED;
+}
+
+static void gpio_limit_set1_irq_init(void)
+{
+	int ret = 0;
+
+	gpio_limit_set1_irq = gpio_to_irq(TEGRA_GPIO_PH5);
+	ret = request_irq(gpio_limit_set1_irq, gpio_limit_set1_irq_handler, IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING, "gpio_limit_set1_irq_handler", NULL);
+	if (ret < 0) {
+		printk(KERN_ERR"%s: Could not request IRQ for the GPIO limit set1, irq = %d, ret = %d\n", __func__, gpio_limit_set1_irq, ret);
+	}
+	printk(KERN_INFO"%s: request irq = %d, ret = %d\n", __func__, gpio_limit_set1_irq, ret);
+}
 
 /********************************************************************
  *	Internal Used Function
@@ -386,10 +674,12 @@ static void dr_controller_run(struct fsl_udc *udc)
 	temp |= USB_MODE_CTRL_MODE_DEVICE;
 	fsl_writel(temp, &dr_regs->usbmode);
 
-	/* Set controller to Run */
-	temp = fsl_readl(&dr_regs->usbcmd);
-	temp |= USB_CMD_RUN_STOP;
-	fsl_writel(temp, &dr_regs->usbcmd);
+	if(usb_function_enable) {
+		/* Set controller to Run */
+		temp = fsl_readl(&dr_regs->usbcmd);
+		temp |= USB_CMD_RUN_STOP;
+		fsl_writel(temp, &dr_regs->usbcmd);
+	}
 
 #ifdef CONFIG_ARCH_TEGRA
 	/* Wait for controller to start */
@@ -1244,6 +1534,11 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 	VDBG("VBUS %s", is_active ? "on" : "off");
 
 	if (udc->transceiver) {
+		mutex_lock(&s_cable_info.cable_info_mutex);
+		s_cable_info.is_active = is_active;
+		s_cable_info.udc_vbus_active = udc->vbus_active;
+		mutex_unlock(&s_cable_info.cable_info_mutex);
+		printk(KERN_INFO "%s, vbus_active=%d, is_active=%d\n", __func__, s_cable_info.udc_vbus_active, s_cable_info.is_active);
 		if (udc->vbus_active && !is_active) {
 			/* If cable disconnected, cancel any delayed work */
 			cancel_delayed_work(&udc->work);
@@ -1257,6 +1552,7 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 			udc->usb_state = USB_STATE_DEFAULT;
 			spin_unlock_irqrestore(&udc->lock, flags);
 			fsl_udc_clk_suspend(false);
+			schedule_delayed_work(&s_cable_info.cable_detection_work, 0*HZ);
 			if (udc->vbus_regulator) {
 				/* set the current limit to 0mA */
 				regulator_set_current_limit(
@@ -1275,6 +1571,7 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 			udc->vbus_active = 1;
 			/* start the controller */
 			dr_controller_run(udc);
+			schedule_delayed_work(&s_cable_info.cable_detection_work, 0.2*HZ);
 			if (udc->vbus_regulator) {
 				/* set the current limit to 100mA */
 				regulator_set_current_limit(
@@ -2721,7 +3018,10 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	u32 dccparams;
 #if defined(CONFIG_ARCH_TEGRA)
 	struct resource *res_sys = NULL;
+	struct fsl_usb2_platform_data *pdata = pdev->dev.platform_data;
 #endif
+
+	printk(KERN_INFO "%s()\n", __func__);
 
 	if (strcmp(pdev->name, driver_name)) {
 		VDBG("Wrong device");
@@ -2970,27 +3270,27 @@ static int __exit fsl_udc_remove(struct platform_device *pdev)
  -----------------------------------------------------------------*/
 static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
 {
-    if (udc_controller->transceiver) {
-        if (udc_controller->transceiver->state != OTG_STATE_B_PERIPHERAL) {
-            /* we are not in device mode, return */
-            return 0;
-        }
-    }
-    if (udc_controller->vbus_active) {
-        spin_lock(&udc_controller->lock);
-        /* Reset all internal Queues and inform client driver */
-        reset_queues(udc_controller);
-        udc_controller->vbus_active = 0;
-        udc_controller->usb_state = USB_STATE_DEFAULT;
-        spin_unlock(&udc_controller->lock);
-    }
-    /* stop the controller and turn off the clocks */
-    dr_controller_stop(udc_controller);
-    if (udc_controller->transceiver) {
-        udc_controller->transceiver->state = OTG_STATE_UNDEFINED;
-    }
-    fsl_udc_clk_suspend(true);
-    return 0;
+	if (udc_controller->transceiver) {
+		if (udc_controller->transceiver->state != OTG_STATE_B_PERIPHERAL) {
+			/* we are not in device mode, return */
+			return 0;
+		}
+	}
+	if (udc_controller->vbus_active) {
+		spin_lock(&udc_controller->lock);
+		/* Reset all internal Queues and inform client driver */
+		reset_queues(udc_controller);
+		udc_controller->vbus_active = 0;
+		udc_controller->usb_state = USB_STATE_DEFAULT;
+		spin_unlock(&udc_controller->lock);
+	}
+	/* stop the controller and turn off the clocks */
+	dr_controller_stop(udc_controller);
+	if (udc_controller->transceiver) {
+		udc_controller->transceiver->state = OTG_STATE_UNDEFINED;
+	}
+	fsl_udc_clk_suspend(true);
+	return 0;
 }
 
 /*-----------------------------------------------------------------
@@ -3010,6 +3310,13 @@ static int fsl_udc_resume(struct platform_device *pdev)
 		if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_VBUS_STATUS)) {
 			/* if there is no VBUS then power down the clocks and return */
 			fsl_udc_clk_disable();
+			if(s_cable_info.udc_vbus_active == 0 && s_cable_info.is_active == 1) {
+				mutex_lock(&s_cable_info.cable_info_mutex);
+				s_cable_info.udc_vbus_active = 1;
+				s_cable_info.is_active = 0;
+				mutex_unlock(&s_cable_info.cable_info_mutex);
+				schedule_delayed_work(&s_cable_info.cable_detection_work, 0*HZ);
+			}
 			return 0;
 		} else {
 			fsl_udc_clk_disable();
@@ -3036,6 +3343,13 @@ static int fsl_udc_resume(struct platform_device *pdev)
 	if (!(fsl_readl(&usb_sys_regs->vbus_wakeup) & USB_SYS_VBUS_STATUS))
 		fsl_udc_clk_suspend(false);
 
+	if((s_cable_info.udc_vbus_active == 1 && s_cable_info.is_active == 0) || (s_cable_info.udc_vbus_active == 0 && s_cable_info.is_active == 0)) {
+		mutex_lock(&s_cable_info.cable_info_mutex);
+		s_cable_info.udc_vbus_active = 0;
+		s_cable_info.is_active = 1;
+		mutex_unlock(&s_cable_info.cable_info_mutex);
+		schedule_delayed_work(&s_cable_info.cable_detection_work, 0.2*HZ);
+	}
 	return 0;
 }
 
@@ -3056,7 +3370,12 @@ static struct platform_driver udc_driver = {
 
 static int __init udc_init(void)
 {
+	int ret;
+
 	printk(KERN_INFO "%s (%s)\n", driver_desc, DRIVER_VERSION);
+	charging_gpios_init();
+	cable_status_init();
+	gpio_limit_set1_irq_init();
 	return platform_driver_probe(&udc_driver, fsl_udc_probe);
 }
 
@@ -3064,6 +3383,8 @@ module_init(udc_init);
 
 static void __exit udc_exit(void)
 {
+	charging_gpios_free();
+	free_irq(gpio_limit_set1_irq, NULL);
 	platform_driver_unregister(&udc_driver);
 	printk(KERN_WARNING "%s unregistered\n", driver_desc);
 }
