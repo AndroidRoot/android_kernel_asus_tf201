@@ -36,6 +36,8 @@
 
 #ifdef __KERNEL__
 #include <linux/module.h>
+#include <asm/uaccess.h>
+#include <linux/fs.h>
 #endif
 
 #include "mpu.h"
@@ -90,6 +92,12 @@
 #define KXTF9_MAX_THS (0xFF)
 #define KXTF9_THS_COUNTS_P_G (32)
 
+#define KXTF9_CALIBRATION_PATH "/data/sensors/KXTF9_Calibration.ini"
+
+bool flagLoadAccelConfig = false;
+EXPORT_SYMBOL(flagLoadAccelConfig);
+static int offset_x = 0, offset_y = 0, offset_z =0;
+
 /* --------------------- */
 /* -    Variables.     - */
 /* --------------------- */
@@ -113,6 +121,46 @@ struct kxtf9_private_data {
 	struct kxtf9_config resume;
 };
 
+static int access_calibration_file(void)
+{
+	char buf[256];
+	int ret = 0;
+	struct file *fp = NULL;
+	mm_segment_t oldfs;
+	int max_x = 0, max_y = 0, max_z = 0;
+	int min_x = 0, min_y = 0, min_z = 0;
+
+	oldfs=get_fs();
+	set_fs(get_ds());
+	memset(buf, 0, sizeof(u8)*256);
+
+	fp=filp_open(KXTF9_CALIBRATION_PATH, O_RDONLY, 0);
+	if (!IS_ERR(fp)) {
+		printk("kxtf9 open config file success\n");
+		ret = fp->f_op->read(fp, buf, sizeof(buf), &fp->f_pos);
+		printk("kxtf9 config content is :%s\n", buf);
+		sscanf(buf,"%6d %6d %6d %6d %6d %6d\n", &max_x, &min_x, &max_y,&min_y, &max_z, &min_z);
+
+		offset_x = min_x + (max_x - min_x)/2;
+		offset_y = min_y + (max_y - min_y)/2;
+		offset_z = min_z + (max_z - min_z)/2;
+
+		printk("kxtf9: offset: %d %d %d\n", offset_x, offset_y, offset_z);
+		filp_close(fp, NULL);
+		set_fs(oldfs);
+		return 0;
+	}
+	else{
+		offset_x = 0;
+		offset_y = 0;
+		offset_z = 0;
+		printk("No kxtf9 calibration file\n");
+		set_fs(oldfs);
+		return -1;
+	}
+
+}
+
 /*****************************************
     Accelerometer Initialization Functions
 *****************************************/
@@ -123,7 +171,7 @@ static int kxtf9_set_ths(void *mlsl_handle,
 			int apply,
 			long ths)
 {
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 	if ((ths * KXTF9_THS_COUNTS_P_G / 1000) > KXTF9_MAX_THS)
 		ths = (KXTF9_MAX_THS * 1000) / KXTF9_THS_COUNTS_P_G;
 
@@ -135,7 +183,7 @@ static int kxtf9_set_ths(void *mlsl_handle,
 		((long)(ths * KXTF9_THS_COUNTS_P_G) / 1000);
 	MPL_LOGV("THS: %d, 0x%02x\n", config->ths, (int)config->reg_ths);
 	if (apply)
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_WUF_THRESH,
 					config->reg_ths);
 	return result;
@@ -147,7 +195,7 @@ static int kxtf9_set_dur(void *mlsl_handle,
 			int apply,
 			long dur)
 {
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 	long reg_dur = (dur * config->odr) / 1000000;
 	config->dur = dur;
 
@@ -157,7 +205,7 @@ static int kxtf9_set_dur(void *mlsl_handle,
 	config->reg_dur = (unsigned char) reg_dur;
 	MPL_LOGV("DUR: %d, 0x%02x\n", config->dur, (int)config->reg_dur);
 	if (apply)
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_WUF_TIMER,
 					(unsigned char)reg_dur);
 	return result;
@@ -179,7 +227,7 @@ static int kxtf9_set_irq(void *mlsl_handle,
 			int apply,
 			long irq_type)
 {
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 	struct kxtf9_private_data *private_data = pdata->private_data;
 
 	config->irq_type = (unsigned char)irq_type;
@@ -203,15 +251,15 @@ static int kxtf9_set_irq(void *mlsl_handle,
 
 	if (apply) {
 		/* Must clear bit 7 before writing new configuration */
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1, 0x40);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_INT_CTRL_REG1,
 					config->reg_int_cfg1);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_INT_CTRL_REG2,
 					config->reg_int_cfg2);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1,
 					config->ctrl_reg1);
 	}
@@ -236,7 +284,7 @@ static int kxtf9_set_odr(void *mlsl_handle,
 			long odr)
 {
 	unsigned char bits;
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 
 	/* Data sheet says there is 12.5 hz, but that seems to produce a single
 	 * correct data value, thus we remove it from the table */
@@ -263,18 +311,23 @@ static int kxtf9_set_odr(void *mlsl_handle,
 		bits = 0;
 	}
 
+	if (odr != 0)
+		config->ctrl_reg1 |= 0x80;
+	else
+		config->ctrl_reg1 &= ~0x80;
+
 	config->reg_odr = bits;
 	kxtf9_set_dur(mlsl_handle, pdata,
 		config, apply, config->dur);
 	MPL_LOGV("ODR: %d, 0x%02x\n", config->odr, (int)config->ctrl_reg1);
 	if (apply) {
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_DATA_CTRL_REG,
 					config->reg_odr);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1,
 					0x40);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1,
 					config->ctrl_reg1);
 	}
@@ -293,7 +346,7 @@ static int kxtf9_set_fsr(void *mlsl_handle,
 			int apply,
 			long fsr)
 {
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 
 	config->ctrl_reg1 = (config->ctrl_reg1 & 0xE7);
 	if (fsr <= 2000) {
@@ -310,9 +363,9 @@ static int kxtf9_set_fsr(void *mlsl_handle,
 	MPL_LOGV("FSR: %d\n", config->fsr);
 	if (apply) {
 		/* Must clear bit 7 before writing new configuration */
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1, 0x40);
-		result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+		result = inv_serial_single_write(mlsl_handle, pdata->address,
 					KXTF9_CTRL_REG1, config->ctrl_reg1);
 	}
 	return result;
@@ -326,38 +379,40 @@ static int kxtf9_suspend(void *mlsl_handle,
 	unsigned char data;
 	struct kxtf9_private_data *private_data = pdata->private_data;
 
+	printk("%s+\n", __func__);
 	/* Wake up */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG1, 0x40);
 	ERROR_CHECK(result);
 	/* INT_CTRL_REG1: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_INT_CTRL_REG1,
 				private_data->suspend.reg_int_cfg1);
 	ERROR_CHECK(result);
 	/* WUF_THRESH: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_WUF_THRESH,
 				private_data->suspend.reg_ths);
 	ERROR_CHECK(result);
 	/* DATA_CTRL_REG */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_DATA_CTRL_REG,
 				private_data->suspend.reg_odr);
 	ERROR_CHECK(result);
 	/* WUF_TIMER */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_WUF_TIMER, private_data->suspend.reg_dur);
 	ERROR_CHECK(result);
 
 	/* Normal operation  */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG1,
 				private_data->suspend.ctrl_reg1);
 	ERROR_CHECK(result);
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
+	result = inv_serial_read(mlsl_handle, pdata->address,
 				KXTF9_INT_REL, 1, &data);
 	ERROR_CHECK(result);
+	printk("%s-\n", __func__);
 
 	return result;
 }
@@ -370,72 +425,73 @@ static int kxtf9_resume(void *mlsl_handle,
 			struct ext_slave_descr *slave,
 			struct ext_slave_platform_data *pdata)
 {
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 	unsigned char data;
 	struct kxtf9_private_data *private_data = pdata->private_data;
 
+	printk("%s+\n", __func__);
 	/* Wake up */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG1, 0x40);
 	ERROR_CHECK(result);
 	/* INT_CTRL_REG1: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_INT_CTRL_REG1,
 				private_data->resume.reg_int_cfg1);
 	ERROR_CHECK(result);
 	/* WUF_THRESH: */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_WUF_THRESH, private_data->resume.reg_ths);
 	ERROR_CHECK(result);
 	/* DATA_CTRL_REG */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_DATA_CTRL_REG,
 				private_data->resume.reg_odr);
 	ERROR_CHECK(result);
 	/* WUF_TIMER */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_WUF_TIMER, private_data->resume.reg_dur);
 	ERROR_CHECK(result);
 
 	/* Normal operation  */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG1,
 				private_data->resume.ctrl_reg1);
 	ERROR_CHECK(result);
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
+	result = inv_serial_read(mlsl_handle, pdata->address,
 				KXTF9_INT_REL, 1, &data);
 	ERROR_CHECK(result);
-
-	return ML_SUCCESS;
+	printk("%s-\n", __func__);
+	return INV_SUCCESS;
 }
 
 static int kxtf9_init(void *mlsl_handle,
 		struct ext_slave_descr *slave,
 		struct ext_slave_platform_data *pdata)
 {
-
+	printk(KERN_INFO "%s+ #####\n", __func__);
 	struct kxtf9_private_data *private_data;
-	int result = ML_SUCCESS;
+	int result = INV_SUCCESS;
 
 	private_data = (struct kxtf9_private_data *)
-		MLOSMalloc(sizeof(struct kxtf9_private_data));
+	    inv_malloc(sizeof(struct kxtf9_private_data));
 
 	if (!private_data)
-		return ML_ERROR_MEMORY_EXAUSTED;
+		return INV_ERROR_MEMORY_EXAUSTED;
 
 	/* RAM reset */
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG1,
 				0x40); /* Fastest Reset */
 	ERROR_CHECK(result);
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_DATA_CTRL_REG,
 				0x36); /* Fastest Reset */
 	ERROR_CHECK(result);
-	result = MLSLSerialWriteSingle(mlsl_handle, pdata->address,
+	result = inv_serial_single_write(mlsl_handle, pdata->address,
 				KXTF9_CTRL_REG3, 0xcd); /* Reset */
 	ERROR_CHECK(result);
-	MLOSSleep(2);
+	inv_sleep(2);
 
 	pdata->private_data = private_data;
 
@@ -477,6 +533,8 @@ static int kxtf9_init(void *mlsl_handle,
 			FALSE,
 			MPU_SLAVE_IRQ_TYPE_NONE);
 	ERROR_CHECK(result);
+
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return result;
 }
 
@@ -484,10 +542,17 @@ static int kxtf9_exit(void *mlsl_handle,
 			  struct ext_slave_descr *slave,
 			  struct ext_slave_platform_data *pdata)
 {
+	printk("%s_shutdown+\n",__FUNCTION__);
 	if (pdata->private_data)
-		return MLOSFree(pdata->private_data);
+	{
+		printk("%s_shutdown - and return inv_free\n",__FUNCTION__);
+		return inv_free(pdata->private_data);
+	}
 	else
-		return ML_SUCCESS;
+	{
+		printk("%s_shutdown - and return INV_SUCCESS\n",__FUNCTION__);
+		return INV_SUCCESS;
+	}
 }
 
 static int kxtf9_config(void *mlsl_handle,
@@ -499,7 +564,7 @@ static int kxtf9_config(void *mlsl_handle,
 	long odr;
 	struct kxtf9_private_data *private_data = pdata->private_data;
 	if (!data->data)
-		return ML_ERROR_INVALID_PARAMETER;
+		return INV_ERROR_INVALID_PARAMETER;
 
 	switch (data->key) {
 	case MPU_SLAVE_CONFIG_ODR_SUSPEND:
@@ -558,10 +623,10 @@ static int kxtf9_config(void *mlsl_handle,
 					data->apply,
 					*((long *)data->data));
 	default:
-		return ML_ERROR_FEATURE_NOT_IMPLEMENTED;
+		return INV_ERROR_FEATURE_NOT_IMPLEMENTED;
 	};
 
-	return ML_SUCCESS;
+	return INV_SUCCESS;
 }
 
 static int kxtf9_get_config(void *mlsl_handle,
@@ -571,7 +636,7 @@ static int kxtf9_get_config(void *mlsl_handle,
 {
 	struct kxtf9_private_data *private_data = pdata->private_data;
 	if (!data->data)
-		return ML_ERROR_INVALID_PARAMETER;
+		return INV_ERROR_INVALID_PARAMETER;
 
 	switch (data->key) {
 	case MPU_SLAVE_CONFIG_ODR_SUSPEND:
@@ -615,10 +680,10 @@ static int kxtf9_get_config(void *mlsl_handle,
 			(unsigned long) private_data->resume.irq_type;
 		break;
 	default:
-		return ML_ERROR_FEATURE_NOT_IMPLEMENTED;
+		return INV_ERROR_FEATURE_NOT_IMPLEMENTED;
 	};
 
-	return ML_SUCCESS;
+	return INV_SUCCESS;
 }
 
 static int kxtf9_read(void *mlsl_handle,
@@ -628,15 +693,42 @@ static int kxtf9_read(void *mlsl_handle,
 {
 	int result;
 	unsigned char reg;
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
+	int x, y, z;
+
+	if(!flagLoadAccelConfig){
+		access_calibration_file();
+		flagLoadAccelConfig = true;
+	}
+	result = inv_serial_read(mlsl_handle, pdata->address,
 				KXTF9_INT_SRC_REG2, 1, &reg);
 	ERROR_CHECK(result);
 
 	if (!(reg & 0x10))
-		return ML_ERROR_ACCEL_DATA_NOT_READY;
+		return INV_ERROR_ACCEL_DATA_NOT_READY;
 
-	result = MLSLSerialRead(mlsl_handle, pdata->address,
-				slave->reg, slave->len, data);
+	result = inv_serial_read(mlsl_handle, pdata->address,
+				 slave->read_reg, slave->read_len, data);
+	x = ((data[1] << 4) | (data[0] >> 4));
+	y = ((data[3] << 4) | (data[2] >> 4));
+	z = ((data[5] << 4) | (data[4] >> 4));
+
+	if (x & 0x800)
+		x |= 0xFFFFF000;
+	if (y & 0x800)
+		y |= 0xFFFFF000;
+	if (z & 0x800)
+		z |= 0xFFFFF000;
+
+//	x -= offset_x;
+//	y -= offset_y;
+//	z -= offset_z;
+
+	data[0] = (x << 4) & 0x000000F0;
+	data[1] = (x >> 4) & 0x000000FF;
+	data[2] = (y << 4) & 0x000000F0;
+	data[3] = (y >> 4) & 0x000000FF;
+	data[4] = (z << 4) & 0x000000F0;
+	data[5] = (z >> 4) & 0x000000FF;
 	ERROR_CHECK(result);
 	return result;
 }

@@ -35,6 +35,10 @@
 #include <linux/suspend.h>
 #include <linux/poll.h>
 
+#include <linux/delay.h>
+#include <linux/timer.h>
+#include <linux/jiffies.h>
+
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -42,6 +46,7 @@
 #include <linux/wait.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
+#include <linux/workqueue.h>
 
 #include "mpuirq.h"
 #include "slaveirq.h"
@@ -49,6 +54,19 @@
 #include "mldl_cfg.h"
 #include <linux/mpu.h>
 
+extern unsigned int factory_mode;
+extern bool flagLoadConfig;
+extern bool flagLoadAccelConfig;
+
+struct delayed_work mpu_init_work;
+#define MPU_INIT_DELAY 200
+
+/*enum ST_Result: defined for enable_self_test() function*/
+enum ST_Result{
+	Success,		/*Test Success*/
+	InspectFault,		/*Enter SELF-TEST mode success, but fail to read data*/
+	RegValFault,		/*Enter SELF-TEST mode fail*/
+	Default };		/*Deafault Status*/
 
 /* Platform data for the MPU */
 struct mpu_private_data {
@@ -72,11 +90,152 @@ struct mpu_private_data {
 	struct mpuirq_data mpu_pm_event;
 	int response_timeout;	/* In seconds */
 	unsigned long event;
+	struct attribute_group attrs;
+	int gyro_status;
+	int accel_status;
+	int compass_status;
 	int pid;
 	struct module *slave_modules[EXT_SLAVE_NUM_TYPES];
 };
 
+struct i2c_client *this_client;
+static int mpu_delay_init(void);
 struct mpu_private_data *mpu_private_data;
+
+static ssize_t enable_load_accel_config(struct device *dev, struct device_attribute *devattr, char *buf)
+{       struct i2c_client *client = to_i2c_client(dev);
+        struct mpu_private_data *data = i2c_get_clientdata(client);
+        //flagLoadAccelConfig = false;
+        return sprintf(buf, "%d\n", flagLoadAccelConfig);
+}
+
+static ssize_t enable_load_mag_config(struct device *dev, struct device_attribute *devattr, char *buf)
+{       struct i2c_client *client = to_i2c_client(dev);
+        struct mpu_private_data *data = i2c_get_clientdata(client);
+        flagLoadConfig = false;
+        return sprintf(buf, "%d\n", flagLoadConfig);
+}
+
+static ssize_t read_compass_status(struct device *dev, struct device_attribute *devattr, char *buf)
+{	struct i2c_client *client = to_i2c_client(dev);
+	struct mpu_private_data *data = i2c_get_clientdata(client);
+	return sprintf(buf, "%d\n", data->compass_status);
+}
+
+static ssize_t read_accel_status(struct device *dev, struct device_attribute *devattr, char *buf)
+{	struct i2c_client *client = to_i2c_client(dev);
+	struct mpu_private_data *data = i2c_get_clientdata(client);
+	return sprintf(buf, "%d\n", data->accel_status);
+}
+
+static ssize_t read_gyro_status(struct device *dev, struct device_attribute *devattr, char *buf)
+{	struct i2c_client *client = to_i2c_client(dev);
+	struct mpu_private_data *data = i2c_get_clientdata(client);
+	return sprintf(buf, "%d\n", data->gyro_status);
+}
+
+static ssize_t read_accel_raw(struct device *dev, struct device_attribute *devattr, char *buf)
+{	struct i2c_client *client = to_i2c_client(dev);
+	struct mpu_private_data *mpu = i2c_get_clientdata(client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	unsigned char data[6];
+	int X = 0, Y = 0, Z = 0;
+	int res = 0;
+
+	if(mldl_cfg->slave[EXT_SLAVE_TYPE_ACCEL] ){
+		res = inv_serial_read(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_ACCEL]->address,
+				0x0F, 1, data);
+		printk("KXTF9 WHO AM I: %d\n",data[0]);
+
+		res = inv_serial_read(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_ACCEL]->address,
+				0x1B, 1, data);
+		printk("KXTF9 CTRL_REG1: 0x%02lx\n",data[0]);
+		res = inv_serial_read(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_ACCEL]->address,
+				0x1E, 1, data);
+		printk("KXTF9 INT_CTRL_REG1: 0x%02lx\n",data[0]);
+		if ((data[0] & 0x80 ) == 0)
+			{
+				printk("KXTF9 is standing by, change to OP \n");
+				data[0] = 0xE0;
+				inv_serial_single_write(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_ACCEL]->address,0x1B, data[0]);
+			}
+
+		res = inv_serial_read(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_ACCEL]->address,
+				0x06, 6, data);
+		printk("KXTF9 raw data 1~6: %d, %d, %d, %d, %d, %d\n",data[0],data[1],data[2],data[3],data[4],data[5]);
+
+		if(res)
+			printk("%s: Read accel data register fail\n", __FUNCTION__);
+		else{
+				X = ((data[1] << 4) | (data[0] >> 4));
+				Y = ((data[3] << 4) | (data[2] >> 4));
+				Z = ((data[5] << 4) | (data[4] >> 4));
+
+				if (X & 0x800)
+					X |= 0xFFFFF000;
+				if (Y & 0x800)
+					Y |= 0xFFFFF000;
+				if (Z & 0x800)
+					Z |= 0xFFFFF000;
+
+				X = X*(-1);
+				Y = Y*(1);
+				Z = Z*(1);
+		}
+	}
+
+	return sprintf(buf, "%d %d %d\n", X, Y, Z);
+}
+
+static ssize_t read_compass_raw(struct device *dev, struct device_attribute *devattr, char *buf)
+{	struct i2c_client *client = to_i2c_client(dev);
+	struct mpu_private_data *mpu = i2c_get_clientdata(client);
+	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
+	unsigned char data[6];
+	int res = 0;
+	printk("%s+\n", __func__);
+	if(mldl_cfg->slave[EXT_SLAVE_TYPE_ACCEL]){
+		printk("%s: have compass\n", __func__);
+		inv_serial_single_write(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_COMPASS]->address,
+				0x1B, 0x92);
+				inv_serial_single_write(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_COMPASS]->address,
+				0x1D, 0x40);
+
+		res = inv_serial_read(client->adapter, mldl_cfg->pdata_slave[EXT_SLAVE_TYPE_COMPASS]->address,
+					0x10, 6, data);
+		if(res){
+			printk("%s: Read compass register fail\n", __FUNCTION__);
+			return sprintf(buf, "0 0 0 0 0 0\n");
+		}
+		else{
+			printk("%x %x %x %x %x %x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
+			return sprintf(buf, "%x %x %x %x %x %x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
+		}
+
+	}else {
+		printk("%s: no compass\n", __func__);
+		return sprintf(buf, "0 0 0 0 0 0\n");
+	}
+}
+
+DEVICE_ATTR(compass_raw, S_IRUGO, read_compass_raw, NULL);
+DEVICE_ATTR(accel_raw, S_IRUGO, read_accel_raw, NULL);
+DEVICE_ATTR(compass_status, S_IRUGO, read_compass_status, NULL);
+DEVICE_ATTR(accel_status, S_IRUGO, read_accel_status, NULL);
+DEVICE_ATTR(gyro_status, S_IRUGO, read_gyro_status, NULL);
+DEVICE_ATTR(enLoadMagConfig, S_IRUGO, enable_load_mag_config, NULL);
+DEVICE_ATTR(enLoadAccelConfig, S_IRUGO, enable_load_accel_config, NULL);
+
+static struct attribute *mpu_3050_attr[] = {
+	&dev_attr_gyro_status.attr,
+	&dev_attr_accel_status.attr,
+	&dev_attr_compass_status.attr,
+	&dev_attr_accel_raw.attr,
+	&dev_attr_compass_raw.attr,
+	&dev_attr_enLoadMagConfig,
+	&dev_attr_enLoadAccelConfig,
+	NULL
+};
 
 static void mpu_pm_timeout(u_long data)
 {
@@ -812,8 +971,10 @@ void mpu_shutdown(struct i2c_client *client)
 	dev_dbg(&client->adapter->dev, "%s\n", __func__);
 }
 
-int mpu_dev_suspend(struct i2c_client *client, pm_message_t mesg)
+int mpu_dev_suspend(struct device *dev, pm_message_t mesg)
 {
+	printk("%s+\n", __FUNCTION__);
+	struct i2c_client *client = i2c_verify_client(dev);
 	struct mpu_private_data *mpu =
 	    (struct mpu_private_data *)i2c_get_clientdata(client);
 	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
@@ -845,11 +1006,14 @@ int mpu_dev_suspend(struct i2c_client *client, pm_message_t mesg)
 			"%s: Already suspended %d\n", __func__, mesg.event);
 	}
 	mutex_unlock(&mpu->mutex);
+	printk("%s-\n", __FUNCTION__);
 	return 0;
 }
 
-int mpu_dev_resume(struct i2c_client *client)
+int mpu_dev_resume(struct device *dev)
 {
+	printk("%s+\n", __FUNCTION__);
+	struct i2c_client *client = i2c_verify_client(dev);
 	struct mpu_private_data *mpu =
 	    (struct mpu_private_data *)i2c_get_clientdata(client);
 	struct mldl_cfg *mldl_cfg = &mpu->mldl_cfg;
@@ -878,6 +1042,7 @@ int mpu_dev_resume(struct i2c_client *client)
 			"%s for pid %d\n", __func__, mpu->pid);
 	}
 	mutex_unlock(&mpu->mutex);
+	printk("%s-\n", __FUNCTION__);
 	return 0;
 }
 
@@ -1054,6 +1219,7 @@ MODULE_DEVICE_TABLE(i2c, mpu_id);
 
 int mpu_probe(struct i2c_client *client, const struct i2c_device_id *devid)
 {
+	printk(KERN_INFO "%s+ #####\n", __func__);
 	struct mpu_platform_data *pdata;
 	struct mpu_private_data *mpu;
 	struct mldl_cfg *mldl_cfg;
@@ -1089,6 +1255,7 @@ int mpu_probe(struct i2c_client *client, const struct i2c_device_id *devid)
 	mpu_private_data = mpu;
 	i2c_set_clientdata(client, mpu);
 	mpu->client = client;
+	this_client = mpu->client;
 
 	init_waitqueue_head(&mpu->mpu_event_wait);
 	mutex_init(&mpu->mutex);
@@ -1145,8 +1312,24 @@ int mpu_probe(struct i2c_client *client, const struct i2c_device_id *devid)
 		dev_WARN(&client->adapter->dev,
 			 "Missing %s IRQ\n", MPU_NAME);
 	}
+
+	if(factory_mode){
+
+		mpu->attrs.attrs = mpu_3050_attr;
+		res = sysfs_create_group(&client->dev.kobj, &mpu->attrs);
+
+		if (res) {
+			dev_err(&client->dev, "Not able to create the sysfs\n");
+			printk("%s:Not able to create the sysfs\n", __FUNCTION__);
+			goto out_attr_register_failed;
+		}
+	}
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return res;
 
+out_attr_register_failed:
+	if (mpu->client->irq)
+		mpuirq_exit();
 out_mpuirq_failed:
 	misc_deregister(&mpu->dev);
 out_misc_register_failed:
@@ -1203,6 +1386,11 @@ static int mpu_remove(struct i2c_client *client)
 
 	return 0;
 }
+MODULE_DEVICE_TABLE(i2c, mpu_id);
+static const struct dev_pm_ops mpu_dev_pm_ops={
+	.suspend = mpu_dev_suspend,
+	.resume = mpu_dev_resume,
+};
 
 static struct i2c_driver mpu_driver = {
 	.class = I2C_CLASS_HWMON,
@@ -1212,20 +1400,35 @@ static struct i2c_driver mpu_driver = {
 	.driver = {
 		   .owner = THIS_MODULE,
 		   .name = MPU_NAME,
+		   .pm = &mpu_dev_pm_ops,
 		   },
 	.address_list = normal_i2c,
 	.shutdown = mpu_shutdown,	/* optional */
-	.suspend = mpu_dev_suspend,	/* optional */
-	.resume = mpu_dev_resume,	/* optional */
 
 };
 
 static int __init mpu_init(void)
 {
+	printk(KERN_INFO "%s+ #####\n", __func__);
+	INIT_DELAYED_WORK(&mpu_init_work, mpu_delay_init);
+	schedule_delayed_work(&mpu_init_work, MPU_INIT_DELAY);
+	printk(KERN_INFO "%s- #####\n", __func__);
+}
+
+static int mpu_delay_init(void)
+{
+	printk(KERN_INFO "%s+ #####\n", __func__);
+	tegra_gpio_enable(143);
+	gpio_request(143, "gpio_pr7");
+	gpio_direction_output(143, 1);
+	pr_info("gpio 2.85V %d set to %d\n",143, gpio_get_value(143));
+	gpio_free(143);
+
 	int res = i2c_add_driver(&mpu_driver);
 	pr_info("%s: Probe name %s\n", __func__, MPU_NAME);
 	if (res)
 		pr_err("%s failed\n", __func__);
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return res;
 }
 

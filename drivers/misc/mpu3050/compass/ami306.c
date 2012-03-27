@@ -1,20 +1,20 @@
 /*
-	$License:
-	Copyright (C) 2011 InvenSense Corporation, All Rights Reserved.
+ $License:
+    Copyright (C) 2011 InvenSense Corporation, All Rights Reserved.
 
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
-	$
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  $
  */
 
 /**
@@ -26,35 +26,27 @@
  *              compass.
  */
 
-/* -------------------------------------------------------------------------- */
+/* ------------------ */
+/* - Include Files. - */
+/* ------------------ */
 
-#include <linux/i2c.h>
+#ifdef __KERNEL__
 #include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/kernel.h>
-#include <linux/errno.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <asm/uaccess.h>
 #include <linux/fs.h>
-#include <linux/workqueue.h>
-#include "mpu-dev.h"
+#endif
 
+#include "mpu.h"
+#include "mlsl.h"
+#include "mlos.h"
 #include "ami_hw.h"
 #include "ami_sensor_def.h"
 
 #include <log.h>
-#include <linux/mpu.h>
-#include "mlsl.h"
-#include "mldl_cfg.h"
 #undef MPL_LOG_TAG
 #define MPL_LOG_TAG "MPL-compass"
 
-struct delayed_work ami306_init_work;
-#define AMI306_INIT_DELAY 200
-static int ami306_mod_delay_init(void);
-
-/* -------------------------------------------------------------------------- */
 #define AMI306_REG_DATAX		(0x10)
 #define AMI306_REG_STAT1		(0x18)
 #define AMI306_REG_CNTL1		(0x1B)
@@ -84,11 +76,10 @@ EXPORT_SYMBOL(flagLoadConfig);
 struct ami306_private_data {
 	int isstandby;
 	unsigned char fine[3];
-	struct ami_sensor_parametor param;
-	struct ami_win_parameter win;
+	AMI_SENSOR_PARAMETOR param;
+	AMI_WIN_PARAMETER win;
 };
 
-/* -------------------------------------------------------------------------- */
 static inline unsigned short little_u8_to_u16(unsigned char *p_u8)
 {
 	return p_u8[0] | (p_u8[1] << 8);
@@ -108,9 +99,9 @@ static int access_calibration_file(void)
 
 	fp=filp_open(AMI30X_CALIBRATION_PATH, O_RDONLY, 0);
 	if (!IS_ERR(fp)) {
-		printk("ami306 open config file success\n");
+		printk("ami304 open config file success\n");
 		ret = fp->f_op->read(fp, buf, sizeof(buf), &fp->f_pos);
-		printk("ami306 config content is :%s\n", buf);
+		printk("ami304 config content is :%s\n", buf);
 		sscanf(buf,"%6d\n%6d %6d %6d\n%6d %6d %6d\n%6d %6d %6d\n%6d %6d %6d\n%6d %6d %6d\n%6d %6d %6d\n%6d %6d %6d\n%6d",
 			&data[0],
 			&data[1], &data[2], &data[3],
@@ -153,17 +144,11 @@ static int ami306_set_bits8(void *mlsl_handle,
 	unsigned char buf;
 
 	result = inv_serial_read(mlsl_handle, pdata->address, reg, 1, &buf);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	buf |= bits;
 	result = inv_serial_single_write(mlsl_handle, pdata->address, reg, buf);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	return result;
 }
 
@@ -175,7 +160,11 @@ static int ami306_wait_data_ready(void *mlsl_handle,
 	unsigned char buf;
 
 	for (; 0 < times; --times) {
+#ifdef __KERNEL__
 		udelay(usecs);
+#else
+		inv_sleep(1);
+#endif
 		result = inv_serial_read(mlsl_handle, pdata->address,
 					 AMI_REG_STA1, 1, &buf);
 		if (buf & AMI_STA1_DRDY_BIT)
@@ -194,10 +183,7 @@ static int ami306_read_raw_data(void *mlsl_handle,
 	unsigned char buf[6];
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_DATAX, sizeof(buf), buf);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	dat[0] = little_u8_to_u16(&buf[0]);
 	dat[1] = little_u8_to_u16(&buf[2]);
 	dat[2] = little_u8_to_u16(&buf[4]);
@@ -214,23 +200,15 @@ static int ami306_force_mesurement(void *mlsl_handle,
 	int status;
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL3, AMI_CTRL3_FORCE_BIT);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	result = ami306_wait_data_ready(mlsl_handle, pdata,
 					AMI_DRDYWAIT, AMI_WAIT_DATAREADY_RETRY);
-	if (result && result != INV_ERROR_COMPASS_DATA_OVERFLOW) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	if (result && result != INV_ERROR_COMPASS_DATA_OVERFLOW)
+		ERROR_CHECK(result);
 	/*  READ DATA X,Y,Z */
 	status = ami306_read_raw_data(mlsl_handle, pdata, ver);
-	if (status) {
-		LOG_RESULT_LOCATION(status);
-		return status;
-	}
+	ERROR_CHECK(status);
 
 	return result;
 }
@@ -239,10 +217,7 @@ static int ami306_mea(void *mlsl_handle,
 		      struct ext_slave_platform_data *pdata, short val[3])
 {
 	int result = ami306_force_mesurement(mlsl_handle, pdata, val);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	val[0] += AMI_STANDARD_OFFSET;
 	val[1] += AMI_STANDARD_OFFSET;
 	val[2] += AMI_STANDARD_OFFSET;
@@ -284,33 +259,21 @@ static int ami306_start_sensor(void *mlsl_handle,
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL1,
 				  AMI_CTRL1_PC1 | AMI_CTRL1_FS1_FORCE);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	/* Step 2 */
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL2, AMI_CTRL2_DREN);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	/* Step 3 */
 	buf[0] = AMI_REG_CTRL4;
 	buf[1] = AMI_CTRL4_HS & 0xFF;
 	buf[2] = (AMI_CTRL4_HS >> 8) & 0xFF;
 	result = inv_serial_write(mlsl_handle, pdata->address,
 				  sizeof(buf), buf);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	/* Step 4 */
 	result = ami306_write_offset(mlsl_handle, pdata, private_data->fine);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	return result;
 }
 
@@ -330,14 +293,11 @@ static int ami306_read_param(void *mlsl_handle,
 	int result = 0;
 	unsigned char regs[12];
 	struct ami306_private_data *private_data = pdata->private_data;
-	struct ami_sensor_parametor *param = &private_data->param;
+	AMI_SENSOR_PARAMETOR *param = &private_data->param;
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_SENX, sizeof(regs), regs);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	/* Little endian 16 bit registers */
 	param->m_gain.x = little_u8_to_u16(&regs[0]);
@@ -377,36 +337,24 @@ static int ami306_initial_b0_adjust(void *mlsl_handle,
 
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL2, AMI_CTRL2_DREN);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	buf[0] = AMI_REG_CTRL4;
 	buf[1] = AMI_CTRL4_HS & 0xFF;
 	buf[2] = (AMI_CTRL4_HS >> 8) & 0xFF;
 	result = inv_serial_write(mlsl_handle, pdata->address,
 				  sizeof(buf), buf);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	for (fn = 0; fn < AMI_FINE_MAX; ++fn) {	/* fine 0 -> 95 */
 		fine[0] = fine[1] = fine[2] = fn;
 		result = ami306_write_offset(mlsl_handle, pdata, fine);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-			return result;
-		}
+		ERROR_CHECK(result);
 
 		result = ami306_force_mesurement(mlsl_handle, pdata, data);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-			return result;
-		}
-		MPL_LOGV("[%d] x:%-5d y:%-5d z:%-5d\n",
-			 fn, data[0], data[1], data[2]);
+		ERROR_CHECK(result);
+		/*MPL_LOGV("[%d] x:%-5d y:%-5d z:%-5d\n",
+			 fn, data[0], data[1], data[2]);*/
 
 		for (ax = 0; ax < 3; ax++) {
 			/* search point most close to zero. */
@@ -421,18 +369,12 @@ static int ami306_initial_b0_adjust(void *mlsl_handle,
 		 private_data->fine[2]);
 
 	result = ami306_write_offset(mlsl_handle, pdata, private_data->fine);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	/* Software Reset */
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL3, AMI_CTRL3_SRST_BIT);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	return result;
 }
 
@@ -455,10 +397,7 @@ static int ami306_search_offset(void *mlsl_handle,
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_FINEOUTPUT_X, sizeof(regs), regs);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	fine_output[0] = little_u8_to_u16(&regs[0]);
 	fine_output[1] = little_u8_to_u16(&regs[2]);
 	fine_output[2] = little_u8_to_u16(&regs[4]);
@@ -477,22 +416,13 @@ static int ami306_search_offset(void *mlsl_handle,
 	/* get current fine */
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFX, 2, &regs[0]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFY, 2, &regs[2]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFZ, 2, &regs[4]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	fine[0] = (unsigned char)(regs[0] & 0x7f);
 	fine[1] = (unsigned char)(regs[2] & 0x7f);
@@ -501,10 +431,7 @@ static int ami306_search_offset(void *mlsl_handle,
 	while (run_flg[0] == 1 || run_flg[1] == 1 || run_flg[2] == 1) {
 
 		result = ami306_mea(mlsl_handle, pdata, val);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-			return result;
-		}
+		ERROR_CHECK(result);
 		MPL_LOGV("val  x:%-5d y:%-5d z:%-5d\n", val[0], val[1], val[2]);
 		MPL_LOGV("now fine x:%-5d y:%-5d z:%-5d\n",
 			 fine[0], fine[1], fine[2]);
@@ -552,20 +479,18 @@ static int ami306_search_offset(void *mlsl_handle,
 
 		/* set current fine */
 		result = ami306_write_offset(mlsl_handle, pdata, fine);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-			return result;
-		}
+		ERROR_CHECK(result);
 	}
 	memcpy(private_data->fine, fine, sizeof(fine));
-out:
+ out:
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL3, AMI_CTRL3_SRST_BIT);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
+#ifdef __KERNEL__
 	udelay(250 + 50);
+#else
+	inv_sleep(1);
+#endif
 	return 0;
 }
 
@@ -576,14 +501,11 @@ static int ami306_read_win(void *mlsl_handle,
 	int result = 0;
 	unsigned char regs[6];
 	struct ami306_private_data *private_data = pdata->private_data;
-	struct ami_win_parameter *win = &private_data->win;
+	AMI_WIN_PARAMETER *win = &private_data->win;
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFOTPX, sizeof(regs), regs);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	win->m_0Gauss_fine.x = (unsigned char)(regs[0] & 0x7f);
 	win->m_0Gauss_fine.y = (unsigned char)(regs[2] & 0x7f);
@@ -591,22 +513,13 @@ static int ami306_read_win(void *mlsl_handle,
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFX, 2, &regs[0]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFY, 2, &regs[2]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_REG_OFFZ, 2, &regs[4]);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	win->m_fine.x = (unsigned char)(regs[0] & 0x7f);
 	win->m_fine.y = (unsigned char)(regs[2] & 0x7f);
@@ -614,10 +527,7 @@ static int ami306_read_win(void *mlsl_handle,
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI_FINEOUTPUT_X, sizeof(regs), regs);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	win->m_fine_output.x = little_u8_to_u16(&regs[0]);
 	win->m_fine_output.y = little_u8_to_u16(&regs[2]);
 	win->m_fine_output.z = little_u8_to_u16(&regs[4]);
@@ -625,37 +535,30 @@ static int ami306_read_win(void *mlsl_handle,
 	return result;
 }
 
-static int ami306_suspend(void *mlsl_handle,
-			  struct ext_slave_descr *slave,
-			  struct ext_slave_platform_data *pdata)
+int ami306_suspend(void *mlsl_handle,
+		   struct ext_slave_descr *slave,
+		   struct ext_slave_platform_data *pdata)
 {
-	printk("ami306: OFF +\n");
+	printk("%s+\n", __FUNCTION__);
 	int result;
 	unsigned char reg;
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 AMI306_REG_CNTL1, 1, &reg);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	reg &= ~(AMI306_BIT_CNTL1_PC1 | AMI306_BIT_CNTL1_FS1);
 	result = inv_serial_single_write(mlsl_handle, pdata->address,
 					 AMI306_REG_CNTL1, reg);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
-
-	printk("ami306: OFF -\n");
+	ERROR_CHECK(result);
+	printk("%s-\n", __FUNCTION__);
 	return result;
 }
 
-static int ami306_resume(void *mlsl_handle,
-			 struct ext_slave_descr *slave,
-			 struct ext_slave_platform_data *pdata)
+int ami306_resume(void *mlsl_handle,
+		  struct ext_slave_descr *slave,
+		  struct ext_slave_platform_data *pdata)
 {
-	printk("ami306: ON +\n");
+	printk("%s+\n", __FUNCTION__);
 	int result = INV_SUCCESS;
 	unsigned char regs[] = {
 		AMI306_REG_CNTL4_1,
@@ -667,10 +570,7 @@ static int ami306_resume(void *mlsl_handle,
 					 AMI306_REG_CNTL1,
 					 AMI306_BIT_CNTL1_PC1 |
 					 AMI306_BIT_CNTL1_FS1);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	/* Step2. Set CNTL2 reg to DRDY active high and enabled
 	   (Write CNTL2:DREN=1) */
@@ -678,18 +578,11 @@ static int ami306_resume(void *mlsl_handle,
 					 AMI306_REG_CNTL2,
 					 AMI306_BIT_CNTL2_DREN |
 					 AMI306_BIT_CNTL2_DRP);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	/* Step3. Set CNTL4 reg to for measurement speed: Write CNTL4, 0xA07E */
-	result = inv_serial_write(mlsl_handle, pdata->address,
-				ARRAY_SIZE(regs), regs);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	result = inv_serial_write(mlsl_handle, pdata->address, DIM(regs), regs);
+	ERROR_CHECK(result);
 
 	/* Step4. skipped */
 
@@ -698,25 +591,24 @@ static int ami306_resume(void *mlsl_handle,
 	result = inv_serial_single_write(mlsl_handle, pdata->address,
 					 AMI306_REG_CNTL3,
 					 AMI306_BIT_CNTL3_F0RCE);
-	printk("ami306: ON -\n");
+	printk("%s-\n", __FUNCTION__);
 	return result;
 }
 
-static int ami306_read(void *mlsl_handle,
-		       struct ext_slave_descr *slave,
-		       struct ext_slave_platform_data *pdata,
-		       unsigned char *data)
+int ami306_read(void *mlsl_handle,
+		struct ext_slave_descr *slave,
+		struct ext_slave_platform_data *pdata, unsigned char *data)
 {
 	unsigned char stat;
 	int result = INV_SUCCESS;
+	int x = 0, y = 0, z = 0;
 	int ii;
 	short val[COMPASS_NUM_AXES];
+
 	result =
 	    inv_serial_read(mlsl_handle, pdata->address, AMI306_REG_STAT1,
 			   1, &stat);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-	}
+	ERROR_CHECK(result);
 
 	if (stat & 0x40) {
 		if(!flagLoadConfig)
@@ -725,27 +617,22 @@ static int ami306_read(void *mlsl_handle,
 			flagLoadConfig = true;
 		}
 		result = inv_serial_read(mlsl_handle, pdata->address, AMI306_REG_DATAX, 6, (unsigned char *) data);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-		}
+		ERROR_CHECK(result);
 		/* start another measurement */
 		result = inv_serial_single_write(mlsl_handle, pdata->address, AMI306_REG_CNTL3, AMI306_BIT_CNTL3_F0RCE);
-		if (result) {
-			LOG_RESULT_LOCATION(result);
-		}
+		ERROR_CHECK(result);
 
 		val[0] =  ((short)(data[1] << 8 | data[0]))*gain_x/100;
 		val[1] =  ((short)(data[3] << 8 | data[2]))*gain_y/100;
 		val[2] =  ((short)(data[5] << 8 | data[4]))*gain_z/100;
 
 	}
+
 	result = ami306_mea(mlsl_handle, pdata, val);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	for (ii = 0; ii < COMPASS_NUM_AXES; ii++) {
 		val[ii] -= AMI_STANDARD_OFFSET;
+
 		data[2 * ii] = val[ii] & 0xFF;
 		data[(2 * ii) + 1] = (val[ii] >> 8) & 0xFF;
 	}
@@ -760,8 +647,7 @@ static int ami306_init(void *mlsl_handle,
 	int result;
 	struct ami306_private_data *private_data;
 	private_data = (struct ami306_private_data *)
-	    kzalloc(sizeof(struct ami306_private_data), GFP_KERNEL);
-
+	    inv_malloc(sizeof(struct ami306_private_data));
 	if (!private_data)
 		return INV_ERROR_MEMORY_EXAUSTED;
 
@@ -769,39 +655,22 @@ static int ami306_init(void *mlsl_handle,
 	result = ami306_set_bits8(mlsl_handle, pdata,
 				  AMI_REG_CTRL1,
 				  AMI_CTRL1_PC1 | AMI_CTRL1_FS1_FORCE);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	/* Read Parameters */
 	result = ami306_read_param(mlsl_handle, slave, pdata);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	/* Read Window */
 	result = ami306_initial_b0_adjust(mlsl_handle, slave, pdata);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = ami306_start_sensor(mlsl_handle, pdata);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 	result = ami306_read_win(mlsl_handle, slave, pdata);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
 
 	result = inv_serial_single_write(mlsl_handle, pdata->address,
 					 AMI306_REG_CNTL1, 0);
-	if (result) {
-		LOG_RESULT_LOCATION(result);
-		return result;
-	}
+	ERROR_CHECK(result);
+
 	printk(KERN_INFO "%s- #####\n", __FUNCTION__);
 	return INV_SUCCESS;
 }
@@ -811,9 +680,16 @@ static int ami306_exit(void *mlsl_handle,
 		       struct ext_slave_platform_data *pdata)
 {
 	printk("%s_shutdown+\n",__FUNCTION__);
-	kfree(pdata->private_data);
-	printk("%s_shutdown - and return INV_SUCCESS\n",__FUNCTION__);
-	return INV_SUCCESS;
+	if (pdata->private_data)
+	{
+		printk("%s_shutdown - and return inv_free\n",__FUNCTION__);
+		return inv_free(pdata->private_data);
+	}
+	else
+	{
+		printk("%s_shutdown - and return INV_SUCCESS\n",__FUNCTION__);
+		return INV_SUCCESS;
+	}
 }
 
 static int ami306_config(void *mlsl_handle,
@@ -821,14 +697,14 @@ static int ami306_config(void *mlsl_handle,
 			 struct ext_slave_platform_data *pdata,
 			 struct ext_slave_config *data)
 {
-	if (!data->data) {
-		LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-		return INV_ERROR_INVALID_PARAMETER;
-	}
+	if (!data->data)
+		ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 
 	switch (data->key) {
 	case MPU_SLAVE_PARAM:
+		break;
 	case MPU_SLAVE_WINDOW:
+		break;
 	case MPU_SLAVE_CONFIG_ODR_SUSPEND:
 	case MPU_SLAVE_CONFIG_ODR_RESUME:
 	case MPU_SLAVE_CONFIG_FSR_SUSPEND:
@@ -840,8 +716,7 @@ static int ami306_config(void *mlsl_handle,
 	case MPU_SLAVE_CONFIG_IRQ_SUSPEND:
 	case MPU_SLAVE_CONFIG_IRQ_RESUME:
 	default:
-		LOG_RESULT_LOCATION(INV_ERROR_FEATURE_NOT_IMPLEMENTED);
-		return INV_ERROR_FEATURE_NOT_IMPLEMENTED;
+		ERROR_CHECK(INV_ERROR_FEATURE_NOT_IMPLEMENTED);
 	};
 
 	return INV_SUCCESS;
@@ -854,95 +729,61 @@ static int ami306_get_config(void *mlsl_handle,
 {
 	int result;
 	struct ami306_private_data *private_data = pdata->private_data;
-	if (!data->data) {
-		LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-		return INV_ERROR_INVALID_PARAMETER;
-	}
+	if (!data->data)
+		ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 
 	switch (data->key) {
 	case MPU_SLAVE_PARAM:
-		if (sizeof(struct ami_sensor_parametor) > data->len) {
-			LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-			return INV_ERROR_INVALID_PARAMETER;
-		}
+		if (sizeof(AMI_SENSOR_PARAMETOR) > data->len)
+			ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 		if (data->apply) {
 			result = ami306_read_param(mlsl_handle, slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 		}
 		memcpy(data->data, &private_data->param,
-		       sizeof(struct ami_sensor_parametor));
+		       sizeof(AMI_SENSOR_PARAMETOR));
 		break;
 	case MPU_SLAVE_WINDOW:
-		if (sizeof(struct ami_win_parameter) > data->len) {
-			LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-			return INV_ERROR_INVALID_PARAMETER;
-		}
+		if (sizeof(AMI_WIN_PARAMETER) > data->len)
+			ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 		if (data->apply) {
 			result = ami306_read_win(mlsl_handle, slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 		}
 		memcpy(data->data, &private_data->win,
-		       sizeof(struct ami_win_parameter));
+		       sizeof(AMI_WIN_PARAMETER));
 		break;
 	case MPU_SLAVE_SEARCHOFFSET:
-		if (sizeof(struct ami_win_parameter) > data->len) {
-			LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-			return INV_ERROR_INVALID_PARAMETER;
-		}
+		if (sizeof(AMI_WIN_PARAMETER) > data->len)
+			ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 		if (data->apply) {
 			result = ami306_search_offset(mlsl_handle,
 						      slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 			/* Start sensor */
 			result = ami306_start_sensor(mlsl_handle, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 			result = ami306_read_win(mlsl_handle, slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 		}
 		memcpy(data->data, &private_data->win,
-		       sizeof(struct ami_win_parameter));
+		       sizeof(AMI_WIN_PARAMETER));
 		break;
 	case MPU_SLAVE_READWINPARAMS:
-		if (sizeof(struct ami_win_parameter) > data->len) {
-			LOG_RESULT_LOCATION(INV_ERROR_INVALID_PARAMETER);
-			return INV_ERROR_INVALID_PARAMETER;
-		}
+		if (sizeof(AMI_WIN_PARAMETER) > data->len)
+			ERROR_CHECK(INV_ERROR_INVALID_PARAMETER);
 		if (data->apply) {
 			result = ami306_initial_b0_adjust(mlsl_handle,
 							  slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 			/* Start sensor */
 			result = ami306_start_sensor(mlsl_handle, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 			result = ami306_read_win(mlsl_handle, slave, pdata);
-			if (result) {
-				LOG_RESULT_LOCATION(result);
-				return result;
-			}
+			ERROR_CHECK(result);
 		}
 		memcpy(data->data, &private_data->win,
-		       sizeof(struct ami_win_parameter));
+		       sizeof(AMI_WIN_PARAMETER));
 		break;
 	case MPU_SLAVE_CONFIG_ODR_SUSPEND:
 		(*(unsigned long *)data->data) = 0;
@@ -960,166 +801,41 @@ static int ami306_get_config(void *mlsl_handle,
 	case MPU_SLAVE_CONFIG_IRQ_RESUME:
 	case MPU_SLAVE_READ_SCALE:
 	default:
-		LOG_RESULT_LOCATION(INV_ERROR_FEATURE_NOT_IMPLEMENTED);
-		return INV_ERROR_FEATURE_NOT_IMPLEMENTED;
+		ERROR_CHECK(INV_ERROR_FEATURE_NOT_IMPLEMENTED);
 	};
 
 	return INV_SUCCESS;
 }
 
-static struct ext_slave_read_trigger ami306_read_trigger = {
+struct ext_slave_read_trigger ami306_read_trigger = {
 	/*.reg              = */ AMI_REG_CTRL3,
 	/*.value            = */ AMI_CTRL3_FORCE_BIT
 };
 
-static struct ext_slave_descr ami306_descr = {
-	.init             = ami306_init,
-	.exit             = ami306_exit,
-	.suspend          = ami306_suspend,
-	.resume           = ami306_resume,
-	.read             = ami306_read,
-	.config           = ami306_config,
-	.get_config       = ami306_get_config,
-	.name             = "ami306",
-	.type             = EXT_SLAVE_TYPE_COMPASS,
-	.id               = COMPASS_ID_AMI306,
-	.read_reg         = 0x0E,
-	.read_len         = 13,
-	.endian           = EXT_SLAVE_LITTLE_ENDIAN,
-	.range            = {5461, 3333},
-	.trigger          = &ami306_read_trigger,
+struct ext_slave_descr ami306_descr = {
+	/*.init             = */ ami306_init,
+	/*.exit             = */ ami306_exit,
+	/*.suspend          = */ ami306_suspend,
+	/*.resume           = */ ami306_resume,
+	/*.read             = */ ami306_read,
+	/*.config           = */ ami306_config,
+	/*.get_config       = */ ami306_get_config,
+	/*.name             = */ "ami306",
+	/*.type             = */ EXT_SLAVE_TYPE_COMPASS,
+	/*.id               = */ COMPASS_ID_AMI306,
+	/*.reg              = */ 0x0E,
+	/*.len              = */ 13,
+	/*.endian           = */ EXT_SLAVE_LITTLE_ENDIAN,
+	/*.range            = */ {5461, 3333},
+	/*.trigger          = */ &ami306_read_trigger,
+	/* For AMI305,the range field needs to be modified to {9830.4f} */
 };
 
 struct ext_slave_descr *ami306_get_slave_descr(void)
 {
 	return &ami306_descr;
 }
-
-/* -------------------------------------------------------------------------- */
-struct ami306_mod_private_data {
-	struct i2c_client *client;
-	struct ext_slave_platform_data *pdata;
-};
-
-static unsigned short normal_i2c[] = { I2C_CLIENT_END };
-
-static int ami306_mod_probe(struct i2c_client *client,
-			   const struct i2c_device_id *devid)
-{
-	struct ext_slave_platform_data *pdata;
-	struct ami306_mod_private_data *private_data;
-	int result = 0;
-
-	dev_info(&client->adapter->dev, "%s: %s\n", __func__, devid->name);
-
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		result = -ENODEV;
-		goto out_no_free;
-	}
-
-	pdata = client->dev.platform_data;
-	if (!pdata) {
-		dev_err(&client->adapter->dev,
-			"Missing platform data for slave %s\n", devid->name);
-		result = -EFAULT;
-		goto out_no_free;
-	}
-
-	private_data = kzalloc(sizeof(*private_data), GFP_KERNEL);
-	if (!private_data) {
-		result = -ENOMEM;
-		goto out_no_free;
-	}
-
-	i2c_set_clientdata(client, private_data);
-	private_data->client = client;
-	private_data->pdata = pdata;
-
-	result = inv_mpu_register_slave(THIS_MODULE, client, pdata,
-					ami306_get_slave_descr);
-	if (result) {
-		dev_err(&client->adapter->dev,
-			"Slave registration failed: %s, %d\n",
-			devid->name, result);
-		goto out_free_memory;
-	}
-
-	return result;
-
-out_free_memory:
-	kfree(private_data);
-out_no_free:
-	dev_err(&client->adapter->dev, "%s failed %d\n", __func__, result);
-	return result;
-
-}
-
-static int ami306_mod_remove(struct i2c_client *client)
-{
-	struct ami306_mod_private_data *private_data =
-		i2c_get_clientdata(client);
-
-	dev_dbg(&client->adapter->dev, "%s\n", __func__);
-
-	inv_mpu_unregister_slave(client, private_data->pdata,
-				ami306_get_slave_descr);
-
-	kfree(private_data);
-	return 0;
-}
-
-static const struct i2c_device_id ami306_mod_id[] = {
-	{ "ami306", COMPASS_ID_AMI306 },
-	{}
-};
-
-MODULE_DEVICE_TABLE(i2c, ami306_mod_id);
-
-static struct i2c_driver ami306_mod_driver = {
-	.class = I2C_CLASS_HWMON,
-	.probe = ami306_mod_probe,
-	.remove = ami306_mod_remove,
-	.id_table = ami306_mod_id,
-	.driver = {
-		   .owner = THIS_MODULE,
-		   .name = "ami306_mod",
-		   },
-	.address_list = normal_i2c,
-};
-
-static int __init ami306_mod_init(void)
-{
-	printk(KERN_INFO "%s+ #####\n", __func__);
-	INIT_DELAYED_WORK(&ami306_init_work, ami306_mod_delay_init);
-	schedule_delayed_work(&ami306_init_work, AMI306_INIT_DELAY);
-	printk(KERN_INFO "%s- #####\n", __func__);
-}
-
-static int ami306_mod_delay_init(void)
-{
-	printk(KERN_INFO "%s+ #####\n", __func__);
-
-	int res = i2c_add_driver(&ami306_mod_driver);
-	pr_info("%s: Probe name %s\n", __func__, "ami306_mod");
-	if (res)
-		pr_err("%s failed\n", __func__);
-	printk(KERN_INFO "%s- #####\n", __func__);
-	return res;
-}
-
-static void __exit ami306_mod_exit(void)
-{
-	pr_info("%s\n", __func__);
-	i2c_del_driver(&ami306_mod_driver);
-}
-
-module_init(ami306_mod_init);
-module_exit(ami306_mod_exit);
-
-MODULE_AUTHOR("Invensense Corporation");
-MODULE_DESCRIPTION("Driver to integrate AMI306 sensor with the MPU");
-MODULE_LICENSE("GPL");
-MODULE_ALIAS("ami306_mod");
+EXPORT_SYMBOL(ami306_get_slave_descr);
 
 /**
  *  @}
