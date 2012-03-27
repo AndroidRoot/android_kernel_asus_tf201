@@ -34,7 +34,11 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-
+//=================stree test=================
+#include <linux/miscdevice.h>
+#include <linux/ioctl.h>
+#include <linux/fs.h>
+//=================stree test end =================
 /* Register definitions */
 #define REG_VSET0		0
 #define REG_VSET1		1
@@ -89,6 +93,11 @@ struct tps6236x_chip {
 	const u16 *voltages;
 	u8 voltage_reg_mask;
 	bool is_force_pwm;
+        //=================stree test=================
+	int			i2c_status;
+	struct delayed_work stress_test;
+	struct miscdevice tps6236x_misc;
+	//=================stree test end=================
 	bool enable_discharge;
 };
 static inline int tps6236x_read(struct tps6236x_chip *tps, u8 reg)
@@ -354,7 +363,85 @@ static int tps6236x_init_dcdc(struct i2c_client *client,
 	init_mV = pdata->init_uV;
 	return __tps6236x_dcdc_set_voltage(tps, init_mV, init_mV, 0);
 }
+//=================stree test=================
+struct tps6236x_chip *temp_tps6236x=NULL;
 
+static ssize_t show_tps6236x_i2c_status(struct device *dev, struct device_attribute *devattr, char *buf)
+{
+	return sprintf(buf, "%d\n", temp_tps6236x->i2c_status);
+}
+static DEVICE_ATTR(tps6236x_i2c_status, S_IWUSR | S_IRUGO,show_tps6236x_i2c_status,NULL);
+
+static struct attribute *tps6236x_i2c_attributes[] = {
+
+	&dev_attr_tps6236x_i2c_status.attr,
+	NULL,
+};
+
+static const struct attribute_group tps6236x_i2c_group = {
+	.attrs = tps6236x_i2c_attributes,
+};
+
+
+#define TPS6236X_IOC_MAGIC	0xFC
+#define TPS6236X_IOC_MAXNR	5
+#define TPS6236X_POLLING_DATA _IOR(TPS6236X_IOC_MAGIC, 1,int)
+
+#define TEST_END (0)
+#define START_NORMAL (1)
+#define START_HEAVY (2)
+#define IOCTL_ERROR (-1)
+ struct workqueue_struct *tps6236x_strees_work_queue=NULL;
+
+void tps6236x_read_stress_test(struct work_struct *work)
+{ 
+	int chip_id = 0;
+
+	chip_id  = tps6236x_reg_read(temp_tps6236x, REG_CHIPID);
+	if (chip_id  < 0) {
+		printk("failed ps236x_read_stress_test \n");
+	}
+	queue_delayed_work(tps6236x_strees_work_queue, &temp_tps6236x->stress_test, 2*HZ);
+	return ;
+}
+long  tps6236x_ioctl(struct file *filp,  unsigned int cmd, unsigned long arg)
+{
+	if (_IOC_TYPE(cmd) ==TPS6236X_IOC_MAGIC){
+	     printk("  tps6236x_ioctl vaild magic \n");
+		}
+	else	{
+		printk("  tps6236x_ioctl invaild magic \n");
+		return -ENOTTY;
+		}
+
+	switch(cmd)
+	{
+		 case TPS6236X_POLLING_DATA :
+		    if ((arg==START_NORMAL)||(arg==START_HEAVY)){
+				 printk(" tps6236x stress test start (%s)\n",(arg==START_NORMAL)?"normal":"heavy");
+				 queue_delayed_work(tps6236x_strees_work_queue, &temp_tps6236x->stress_test, 2*HZ);
+		    	}
+		else{
+				 printk(" t tps6236x tress test end\n");
+				 cancel_delayed_work_sync(&temp_tps6236x->stress_test);
+	      }
+		break;
+	  default:  /* redundant, as cmd was checked against MAXNR */
+	           printk("  TPS6236X: unknow i2c  stress test  command cmd=%x arg=%lu\n",cmd,arg);
+		return -ENOTTY;
+		}
+   return 0;
+}
+int tps6236x_open(struct inode *inode, struct file *filp)
+{
+	return 0;          
+}
+struct file_operations tps6236x_fops = {
+	.owner =    THIS_MODULE,
+	.unlocked_ioctl =   tps6236x_ioctl,
+	.open =  tps6236x_open,
+};
+//=================stree test end=================
 static int __devinit tps6236x_probe(struct i2c_client *client,
 				     const struct i2c_device_id *id)
 {
@@ -365,7 +452,9 @@ static int __devinit tps6236x_probe(struct i2c_client *client,
 	int err;
 	int chip_id;
 	int part_id;
-
+	//=================stree test=================
+	int rc;
+	//=================stree test end==============
 	dev_dbg(&client->dev, "%s() is called\n", __func__);
 	if (!i2c_check_functionality(client->adapter,
 				I2C_FUNC_SMBUS_BYTE_DATA)) {
@@ -450,10 +539,26 @@ static int __devinit tps6236x_probe(struct i2c_client *client,
 	tps->rdev = rdev;
 
 	tps6236x_debuginit(tps);
+	//=================stree test=================
+	temp_tps6236x=tps;
+       temp_tps6236x->i2c_status=1;
+	if (sysfs_create_group(&client->dev.kobj, &tps6236x_i2c_group)) {
+		dev_err(&client->dev, "tps6236x_i2c_probe:Not able to create the sysfs\n");
+	}
+       INIT_DELAYED_WORK(&temp_tps6236x->stress_test,  tps6236x_read_stress_test) ;
+       tps6236x_strees_work_queue = create_singlethread_workqueue("tps6236x_strees_test_workqueue");
+
+	temp_tps6236x->tps6236x_misc.minor	= MISC_DYNAMIC_MINOR;
+	temp_tps6236x->tps6236x_misc.name	= "tps6236x";
+	temp_tps6236x->tps6236x_misc.fops  	= &tps6236x_fops;
+       rc=misc_register(&temp_tps6236x->tps6236x_misc);
+	 printk(KERN_INFO "tps6236x register misc device for I2C stress test rc=%x tps->chip_id=%u chip_id=%x\n", rc,tps->chip_id,chip_id );
+	//=================stree test end=================
 	return 0;
 
 fail:
 	kfree(tps);
+	printk(KERN_INFO "tps6236x_probe err=%x\n",err);
 	return err;
 }
 
