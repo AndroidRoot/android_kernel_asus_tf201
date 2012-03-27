@@ -233,6 +233,9 @@ struct ext_slave_read_trigger {
 	__u8 value;
 };
 
+#define RANGE_FIXEDPOINT_TO_LONG_MG(rng)		\
+	(rng.mantissa * 1000 + rng.fraction / 10)
+
 /**
  *  struct ext_slave_descr - Description of the slave device for programming.
  *
@@ -307,8 +310,11 @@ struct ext_slave_descr {
  */
 struct mpu_platform_data {
 	__u8 int_config;
-	__u8 level_shifter;
 	__s8 orientation[GYRO_NUM_AXES * GYRO_NUM_AXES];
+	__u8 level_shifter;
+/*	struct ext_slave_platform_data accel;
+	struct ext_slave_platform_data compass;
+	struct ext_slave_platform_data pressure;*/
 };
 
 #define MPU_IOCTL (0x81) /* Magic number for MPU Iocts */

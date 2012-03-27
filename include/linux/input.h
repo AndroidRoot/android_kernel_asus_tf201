@@ -157,6 +157,7 @@ struct input_keymap_entry {
 #define EV_FF			0x15
 #define EV_PWR			0x16
 #define EV_FF_STATUS		0x17
+#define EV_TOUCH                0x18
 #define EV_MAX			0x1f
 #define EV_CNT			(EV_MAX+1)
 
