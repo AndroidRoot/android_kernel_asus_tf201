@@ -191,7 +191,11 @@ static struct platform_driver bcm4329_rfkill_driver = {
 
 static int __init bcm4329_rfkill_init(void)
 {
-	return platform_driver_register(&bcm4329_rfkill_driver);
+	printk(KERN_INFO "%s+ #####\n", __func__);
+	int ret;
+	ret = platform_driver_register(&bcm4329_rfkill_driver);
+	printk(KERN_INFO "%s- #####\n", __func__);
+	return ret;
 }
 
 static void __exit bcm4329_rfkill_exit(void)
