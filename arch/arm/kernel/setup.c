@@ -207,6 +207,16 @@ static const char *proc_arch[] = {
 	"?(17)",
 };
 
+enum
+{
+    BL_TF201,
+    BL_TF201X,
+    BL_TF201XG,
+    BL_TF300T,
+    BL_TF201J,
+    BL_UNKNOWN
+};
+
 int cpu_architecture(void)
 {
 	int cpu_arch;
@@ -494,6 +504,59 @@ static int __init arm_add_memory(phys_addr_t start, unsigned long size)
 	meminfo.nr_banks++;
 	return 0;
 }
+
+/*
+ * In factory test mode, factory_mode is set as 2.
+ * In normal mode, factory_mode remains 0.
+ */
+
+unsigned int factory_mode = 0;
+EXPORT_SYMBOL(factory_mode);
+static int __init check_factory_mode(char *p)
+{
+	char str[]="factory2";
+	char *s1 = str;
+	char *s2 = p;
+
+	for (; (*s1 == *s2) && (*s1 != NULL); ++s1, ++s2);
+
+	if (*s1 == 0){
+		factory_mode = 2;
+	}
+
+	printk("factory_mode = %d\n", factory_mode);
+	return 0;
+}
+early_param("androidboot.mode", check_factory_mode);
+
+/*
+ * report Project Id for pinmux setting
+ * TF201=0, TF201G=1, TF201X=2, TF201XG=3
+ */
+
+unsigned int bl_project_id = 0;
+EXPORT_SYMBOL(bl_project_id);
+static int __init check_project_id(char *options)
+{
+	printk("project id = %s\n", options);
+
+	if (!strcmp(options, "TF201"))
+		bl_project_id = BL_TF201;
+	else if (!strcmp(options, "TF201X"))
+		bl_project_id = BL_TF201X;
+	else if (!strcmp(options, "TF201XG"))
+		bl_project_id = BL_TF201XG;
+        else if (!strcmp(options, "TF300T"))
+                bl_project_id = BL_TF300T;
+        else if (!strcmp(options, "BL_TF201J"))
+                bl_project_id = BL_TF201J;
+	else
+		bl_project_id = BL_UNKNOWN;
+
+	return 0;
+}
+early_param("project.id", check_project_id);
+
 
 /*
  * Pick out the memory size.  We look for mem=size@start,
