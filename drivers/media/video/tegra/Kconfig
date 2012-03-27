@@ -11,6 +11,32 @@ config TEGRA_CAMERA
 
           If unsure, say Y
 
+config VIDEO_YUV
+        tristate "YUV camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a template driver for all YUV camera sensor
+
+config VIDEO_FJM6MO
+        tristate "FJM6MO isp sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the Fujitsu M6MO ISP sensor
+          for use with the tegra isp.
+
+config VIDEO_MI1040
+        tristate "MI1040 camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for the Aptina mi1040 camera sensor
+          for use with the tegra isp.
+
+config VIDEO_YUV_OV5640
+        tristate "OV5640 YUV camera sensor support"
+        depends on I2C && ARCH_TEGRA
+        ---help---
+          This is a driver for OV5640 YUV camera sensor
+
 config VIDEO_OV5650
         tristate "OV5650 camera sensor support"
         depends on I2C && ARCH_TEGRA
