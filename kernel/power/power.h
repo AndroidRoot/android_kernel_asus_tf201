@@ -189,6 +189,19 @@ static inline void suspend_test_start(void) {}
 static inline void suspend_test_finish(const char *label) {}
 #endif /* !CONFIG_PM_TEST_SUSPEND */
 
+#ifdef CONFIG_PM_EXPIRE_SUSPEND
+/* kernel/power/suspend_expire.c */
+extern void suspend_expire_start(void);
+extern void suspend_expire_finish(const char *label);
+extern void freezer_expire_start(void);
+extern void freezer_expire_finish(const char *label);
+#else /* !CONFIG_PM_EXPIRE_SUSPEND */
+static inline void suspend_expire_start(void) {}
+static inline void suspend_expire_finish(const char *label) {}
+static inline void freezer_expire_start(void) {}
+static inline void freezer_expire_finish(const char *label) {}
+#endif /* !CONFIG_PM_EXPIRE_SUSPEND */
+
 #ifdef CONFIG_PM_SLEEP
 /* kernel/power/main.c */
 extern int pm_notifier_call_chain(unsigned long val);

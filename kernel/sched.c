@@ -4008,6 +4008,10 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		show_regs(regs);
 	else
 		dump_stack();
+#ifdef CONFIG_DEBUG_ASUS
+	//Force system hang for debugging under SMP
+	BUG_ON(1);
+#endif
 }
 
 /*
@@ -6088,7 +6092,64 @@ static void migrate_tasks(unsigned int dead_cpu)
 
 	rq->stop = stop;
 }
+static int  migrate_tasks2(unsigned int dead_cpu)
+{
+	struct rq *rq = cpu_rq(dead_cpu);
+	struct task_struct *next, *stop = rq->stop;
+	int dest_cpu;
+       int loop=0;
+	int old_nr_running=-1;
+	#define MAXIMAL_MIGRATION_RETRY_COUNT	(2000)
+	/*
+	 * Fudge the rq selection such that the below task selection loop
+	 * doesn't get stuck on the currently eligible stop task.
+	 *
+	 * We're currently inside stop_machine() and the rq is either stuck
+	 * in the stop_machine_cpu_stop() loop, or we're executing this code,
+	 * either way we should never end up calling schedule() until we're
+	 * done here.
+	 */
+	rq->stop = NULL;
+	for ( ; ; ) {
+		/*
+		 * There's this thread running, bail when that's the only
+		 * remaining thread.
+		 */
+		 if (old_nr_running!=rq->nr_running){
+			old_nr_running=rq->nr_running;
+			loop=0;
+		 }else if(++loop > MAXIMAL_MIGRATION_RETRY_COUNT ){
+			 if(next)
+				printk("[Warning]migrate_tasks2 failed! nr_running=%u dead_cpu=%u task=%s\n",rq->nr_running,dead_cpu,next->comm);
+			 else
+				printk("[Warning]migrate_tasks2 failed! nr_running=%u dead_cpu=%u \n",rq->nr_running,dead_cpu);
 
+			if(!spin_is_locked(&rq->lock))
+				raw_spin_lock(&rq->lock);
+			rq->stop = stop;
+			return 1;
+		 }
+
+		if (rq->nr_running == 1)
+			break;
+
+		next = pick_next_task(rq);
+		BUG_ON(!next);
+
+		next->sched_class->put_prev_task(rq, next);
+
+		/* Find suitable destination for @next, with force if needed. */
+		dest_cpu = select_fallback_rq(dead_cpu, next);
+		raw_spin_unlock(&rq->lock);
+
+		__migrate_task(next, dead_cpu, dest_cpu);
+
+		raw_spin_lock(&rq->lock);
+	}
+
+	rq->stop = stop;
+	return 0;
+}
 #endif /* CONFIG_HOTPLUG_CPU */
 
 #if defined(CONFIG_SCHED_DEBUG) && defined(CONFIG_SYSCTL)
@@ -6291,7 +6352,7 @@ static void set_rq_offline(struct rq *rq)
  * migration_call - callback that gets triggered when a CPU is added.
  * Here we can start up the necessary migration thread for the new CPU.
  */
-static int __cpuinit
+int __cpuinit
 migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
 {
 	int cpu = (long)hcpu;
@@ -6323,10 +6384,16 @@ migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
 			BUG_ON(!cpumask_test_cpu(cpu, rq->rd->span));
 			set_rq_offline(rq);
 		}
-		migrate_tasks(cpu);
+		if(migrate_tasks2(cpu)){
+			printk("[Warning]migration_call: migrate_tasks failed+\n");
+			if (rq->rd)
+				set_rq_online(rq);
+			raw_spin_unlock_irqrestore(&rq->lock, flags);
+			printk("[Warning]migration_call: migrate_tasks failed -\n");
+			return NOTIFY_BAD;
+		}
 		BUG_ON(rq->nr_running != 1); /* the migration thread */
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
-
 		migrate_nr_uninterruptible(rq);
 		calc_global_load_remove(rq);
 		break;
@@ -6343,7 +6410,7 @@ migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
  * happens before everything else.  This has to be lower priority than
  * the notifier in the perf_event subsystem, though.
  */
-static struct notifier_block __cpuinitdata migration_notifier = {
+ struct notifier_block __cpuinitdata migration_notifier = {
 	.notifier_call = migration_call,
 	.priority = CPU_PRI_MIGRATION,
 };

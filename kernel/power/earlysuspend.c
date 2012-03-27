@@ -27,7 +27,7 @@ enum {
 	DEBUG_USER_STATE = 1U << 0,
 	DEBUG_SUSPEND = 1U << 2,
 };
-static int debug_mask = DEBUG_USER_STATE;
+static int debug_mask = DEBUG_USER_STATE | DEBUG_SUSPEND;
 module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 static DEFINE_MUTEX(early_suspend_lock);
@@ -43,7 +43,7 @@ enum {
 	SUSPEND_REQUESTED_AND_SUSPENDED = SUSPEND_REQUESTED | SUSPENDED,
 };
 static int state;
-
+extern  void unlock_cpu_lp_mode(void);
 void register_early_suspend(struct early_suspend *handler)
 {
 	struct list_head *pos;
@@ -131,6 +131,7 @@ static void late_resume(struct work_struct *work)
 	}
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("late_resume: call handlers\n");
+	unlock_cpu_lp_mode();
 	list_for_each_entry_reverse(pos, &early_suspend_handlers, link)
 		if (pos->resume != NULL)
 			pos->resume(pos);

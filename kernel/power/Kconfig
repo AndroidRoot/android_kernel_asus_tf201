@@ -217,6 +217,15 @@ config PM_TEST_SUSPEND
 	You probably want to have your system's RTC driver statically
 	linked, ensuring that it's available when this test runs.
 
+config PM_EXPIRE_SUSPEND
+	bool "Set up an expire timer for suspending/resuming of devices"
+	depends on SUSPEND && PM_DEBUG
+	---help---
+	This option will let you set up kernel timer during callbacks
+	suspend/resume of non-sysdev drivers. Warning on either suspend or
+	resume also means the system has some performance issues, or even
+	meets system hang.
+
 config CAN_PM_TRACE
 	def_bool y
 	depends on PM_DEBUG && PM_SLEEP
