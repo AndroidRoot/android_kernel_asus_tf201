@@ -177,7 +177,7 @@ out:
 	return IRQ_HANDLED;
 }
 
-int __init tegra_mc_init(void)
+void __init tegra_mc_init(void)
 {
 	if (request_irq(INT_MC_GENERAL, tegra_mc_error_isr, 0,
 			"mc_status", NULL)) {
@@ -188,6 +188,5 @@ int __init tegra_mc_init(void)
 			MC_INT_DECERR_EMEM_OTHERS;
 		writel(reg, mc + MC_INT_MASK);
 	}
-	return 0;
 }
 arch_initcall(tegra_mc_init);

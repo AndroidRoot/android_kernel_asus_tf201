@@ -33,6 +33,7 @@
 
 #include <mach/iomap.h>
 #include <mach/edp.h>
+#include <mach/board-cardhu-misc.h>
 
 #include "clock.h"
 #include "fuse.h"
@@ -4336,6 +4337,24 @@ static struct cpufreq_frequency_table freq_table_1p5GHz[] = {
 	{13, CPUFREQ_TABLE_END },
 };
 
+static struct cpufreq_frequency_table freq_table_1p6GHz[] = {
+	{ 0,  102000 },
+	{ 1,  204000 },
+	{ 2,  370000 },
+	{ 3,  475000 },
+	{ 4,  620000 },
+	{ 5,  760000 },
+	{ 6,  880000 },
+	{ 7, 1000000 },
+	{ 8, 1100000 },
+	{ 9, 1200000 },
+	{10, 1300000 },
+	{11, 1400000 },
+	{12, 1500000 },
+	{13, 1600000 },
+	{14, CPUFREQ_TABLE_END },
+};
+
 static struct cpufreq_frequency_table freq_table_1p7GHz[] = {
 	{ 0,  102000 },
 	{ 1,  204000 },
@@ -4359,6 +4378,7 @@ static struct tegra_cpufreq_table_data cpufreq_tables[] = {
 	{ freq_table_1p3GHz, 1, 9, 2},
 	{ freq_table_1p4GHz, 1, 10, 2},
 	{ freq_table_1p5GHz, 1, 11, 2},
+	{ freq_table_1p6GHz, 1, 12, 2},
 	{ freq_table_1p7GHz, 1, 11, 2},
 };
 
@@ -4439,6 +4459,7 @@ struct tegra_cpufreq_table_data *tegra_cpufreq_table_get(void)
  * respective emc rate should be above TEGRA_EMC_BRIDGE_RATE_MIN
  */
 /* FIXME: explicitly check this dependency */
+extern int  gps_enable;
 unsigned long tegra_emc_to_cpu_ratio(unsigned long cpu_rate)
 {
 	static unsigned long emc_max_rate = 0;
@@ -4447,16 +4468,40 @@ unsigned long tegra_emc_to_cpu_ratio(unsigned long cpu_rate)
 		emc_max_rate = clk_round_rate(
 			tegra_get_clock_by_name("emc"), ULONG_MAX);
 
-	/* Vote on memory bus frequency based on cpu frequency;
-	   cpu rate is in kHz, emc rate is in Hz */
-	if (cpu_rate >= 750000)
-		return emc_max_rate;	/* cpu >= 750 MHz, emc max */
-	else if (cpu_rate >= 450000)
-		return emc_max_rate/2;	/* cpu >= 500 MHz, emc max/2 */
-	else if (cpu_rate >= 250000)
-		return 100000000;	/* cpu >= 250 MHz, emc 100 MHz */
+	const char *project = tegra3_get_project_name();
+
+	if(!strcmp(project, "TF201"))
+	{
+		/* Vote on memory bus frequency based on cpu frequency;
+		   cpu rate is in kHz, emc rate is in Hz */
+		 if(!gps_enable){
+			if (cpu_rate >= 750000)
+				return emc_max_rate;	/* cpu >= 750 MHz, emc max */
+			else if (cpu_rate >= 450000)
+				return emc_max_rate/2;	/* cpu >= 500 MHz, emc max/2 */
+			else if (cpu_rate >= 250000)
+				return 100000000;	/* cpu >= 250 MHz, emc 100 MHz */
+			else
+				return 0;		/* emc min */
+		}
+		else{
+			if (cpu_rate >= 750000)
+				return emc_max_rate;	/* cpu >= 750 MHz, emc max */
+			else
+				return emc_max_rate/2;
+		}
+	}
 	else
-		return 0;		/* emc min */
+	{
+		if (cpu_rate >= 750000)
+				return emc_max_rate;	/* cpu >= 750 MHz, emc max */
+			else if (cpu_rate >= 450000)
+				return emc_max_rate/2;	/* cpu >= 500 MHz, emc max/2 */
+			else if (cpu_rate >= 250000)
+				return 100000000;	/* cpu >= 250 MHz, emc 100 MHz */
+			else
+				return 0;		/* emc min */
+	}
 }
 #endif
 

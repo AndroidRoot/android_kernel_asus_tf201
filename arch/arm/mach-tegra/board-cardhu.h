@@ -170,6 +170,9 @@
 #define CAMERA_FLASH_SYNC_GPIO		TEGRA_GPIO_PBB3
 #define CAMERA_FLASH_MAX_TORCH_AMP	7
 #define CAMERA_FLASH_MAX_FLASH_AMP	7
+/* CAMERA RELATED GPIOs on TF201*/
+#define ISP_POWER_1V2_EN_GPIO       TEGRA_GPIO_PS3      //ISP_1V2_EN VDD_ISP_1V2
+#define ISP_POWER_RESET_GPIO        TEGRA_GPIO_PBB0     //CAM_RST_5M, RSTX
 
 /* PCA954x I2C bus expander bus addresses */
 #define PCA954x_I2C_BUS_BASE	6
@@ -216,6 +219,9 @@ int cardhu_pm298_regulator_init(void);
 int cardhu_pm299_gpio_switch_regulator_init(void);
 int cardhu_pm299_regulator_init(void);
 void __init cardhu_tsensor_init(void);
+#define TOUCH_GPIO_IRQ_ATMEL_T9	TEGRA_GPIO_PH4
+#define TOUCH_GPIO_RST_ATMEL_T9	TEGRA_GPIO_PH6
+#define TOUCH_BUS_ATMEL_T9	1
 
 /* Invensense MPU Definitions */
 #define MPU_GYRO_NAME		"mpu3050"
@@ -224,15 +230,15 @@ void __init cardhu_tsensor_init(void);
 #define MPU_GYRO_BUS_NUM	2
 #define MPU_GYRO_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
 #define MPU_ACCEL_NAME		"kxtf9"
-#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PL1
+#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PO5
 #define MPU_ACCEL_ADDR		0x0F
 #define MPU_ACCEL_BUS_NUM	2
-#define MPU_ACCEL_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
-#define MPU_COMPASS_NAME	"ak8975"
-#define MPU_COMPASS_IRQ_GPIO	0
-#define MPU_COMPASS_ADDR	0x0C
+#define MPU_ACCEL_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define MPU_COMPASS_NAME	"ami306"
+#define MPU_COMPASS_IRQ_GPIO	TEGRA_GPIO_PW0
+#define MPU_COMPASS_ADDR	0x0E
 #define MPU_COMPASS_BUS_NUM	2
-#define MPU_COMPASS_ORIENTATION	{ 1, 0, 0, 0, 1, 0, 0, 0, 1 }
+#define MPU_COMPASS_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
 
 /* Baseband GPIO addresses */
 #define BB_GPIO_BB_EN			TEGRA_GPIO_PR5

@@ -237,6 +237,7 @@ static struct i2c_board_info cardhu_i2c0_ina219_board_info[] = {
 
 int __init cardhu_pmon_init(void)
 {
+	#if 0
 	struct board_info bi;
 
 	tegra_get_board_info(&bi);
@@ -251,6 +252,7 @@ int __init cardhu_pmon_init(void)
 
 	i2c_register_board_info(0, cardhu_i2c0_ina219_board_info,
 		ARRAY_SIZE(cardhu_i2c0_ina219_board_info));
+	#endif
 	return 0;
 }
 

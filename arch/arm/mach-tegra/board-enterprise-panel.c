@@ -113,6 +113,7 @@ static bool kernel_1st_panel_init = true;
 static int enterprise_backlight_notify(struct device *unused, int brightness)
 {
 	int cur_sd_brightness = atomic_read(&sd_brightness);
+	int orig_brightness = brightness;
 
 	/* SD brightness is a percentage, 8-bit value. */
 	brightness = (brightness * cur_sd_brightness) / 255;
@@ -707,6 +708,8 @@ struct early_suspend enterprise_panel_early_suspender;
 
 static void enterprise_panel_early_suspend(struct early_suspend *h)
 {
+	unsigned i;
+
 	/* power down LCD, add use a black screen for HDMI */
 	if (num_registered_fb > 0)
 		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);

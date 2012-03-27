@@ -867,7 +867,7 @@ static struct notifier_block tegra_emc_resume_nb = {
 	.priority = -1,
 };
 
-void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
+int tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 {
 	int i, mv;
 	u32 reg, div_value;
@@ -890,7 +890,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 	if (emc->parent != tegra_get_clock_by_name("pll_m")) {
 		pr_err("tegra: boot parent %s is not supported by EMC DFS\n",
 			emc->parent->name);
-		return;
+		return 0;
 	}
 
 	if (!table || !table_size) {
@@ -911,7 +911,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 	default:
 		pr_err("tegra: invalid EMC DFS table: unknown rev 0x%x\n",
 			table[0].rev);
-		return;
+		return 0;
 	}
 
 	/* Match EMC source/divider settings with table entries */
@@ -952,7 +952,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 	if (!max_entry) {
 		pr_err("tegra: invalid EMC DFS table: entry for max rate"
 		       " %lu kHz is not found\n", max_rate);
-		return;
+		return 0;
 	}
 
 	tegra_emc_table = table;
@@ -970,7 +970,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 	if (!is_emc_bridge()) {
 		tegra_emc_table = NULL;
 		pr_err("tegra: invalid EMC DFS table: emc bridge not found");
-		return;
+		return 0;
 	}
 	pr_info("tegra: validated EMC DFS table\n");
 
@@ -982,6 +982,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 
 	register_pm_notifier(&tegra_emc_suspend_nb);
 	register_pm_notifier(&tegra_emc_resume_nb);
+        return 1;
 }
 
 void tegra_emc_timing_invalidate(void)

@@ -40,6 +40,7 @@ config ARCH_TEGRA_3x_SOC
 	select REPORT_PRESENT_CPUS if TEGRA_AUTO_HOTPLUG
 	select ARCH_SUPPORTS_MSI if TEGRA_PCI
 	select PCI_MSI if TEGRA_PCI
+	select ARM_ERRATA_754322
 	help
 	  Support for NVIDIA Tegra 3 family of SoCs, based upon the
 	  ARM CortexA9MP CPU and the ARM PL310 L2 cache controller
@@ -134,7 +135,7 @@ config MACH_ARUBA
 config MACH_CARDHU
        bool "Cardhu board"
        depends on ARCH_TEGRA_3x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5631 if SND_SOC
        help
          Support for NVIDIA Cardhu development platform
 
@@ -307,6 +308,10 @@ config TEGRA_THERMAL_THROTTLE
 	help
 	  Also requires enabling a temperature sensor such as NCT1008.
 
+config DEBUG_ASUS
+	bool "For ASUS user-debug build"
+	help
+	  Say Y here for user-debug build.
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
 	help
@@ -449,5 +454,9 @@ config TEGRA_WDT_RECOVERY
 	help
 	  Enables watchdog recovery mechanism to protect against
 	  suspend/resume hangs.
+
+config ASUS_EDP_POLICY
+	bool "ASUS EDP init regulator policy"
+	default y
 endif
 

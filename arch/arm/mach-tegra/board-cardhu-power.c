@@ -38,6 +38,7 @@
 #include <mach/pinmux.h>
 #include <mach/edp.h>
 #include <mach/tsensor.h>
+#include <mach/board-cardhu-misc.h>
 
 #include "gpio-names.h"
 #include "board.h"
@@ -78,7 +79,6 @@ static struct regulator_consumer_supply tps6591x_vio_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_usb_pll", NULL),
 	REGULATOR_SUPPLY("avdd_osc", NULL),
 	REGULATOR_SUPPLY("vddio_sys", NULL),
-	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
 	REGULATOR_SUPPLY("pwrdet_sdmmc4", NULL),
 	REGULATOR_SUPPLY("vdd1v8_satelite", NULL),
 	REGULATOR_SUPPLY("vddio_uart", NULL),
@@ -112,6 +112,7 @@ static struct regulator_consumer_supply tps6591x_ldo1_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_pex_pll", NULL),
 	REGULATOR_SUPPLY("avdd_pexa", NULL),
 	REGULATOR_SUPPLY("vdd_pexa", NULL),
+	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
 };
 
 static struct regulator_consumer_supply tps6591x_ldo2_supply_0[] = {
@@ -119,6 +120,7 @@ static struct regulator_consumer_supply tps6591x_ldo2_supply_0[] = {
 	REGULATOR_SUPPLY("vdd_sata", NULL),
 	REGULATOR_SUPPLY("avdd_sata_pll", NULL),
 	REGULATOR_SUPPLY("avdd_plle", NULL),
+	REGULATOR_SUPPLY("vddio_sd_slot", "sdhci-tegra.0"),
 };
 
 static struct regulator_consumer_supply tps6591x_ldo3_supply_e118x[] = {
@@ -196,7 +198,7 @@ TPS_PDATA_INIT(vddctrl, 0,      600,  1400, 0, 1, 1, 0, -1, 0, 0, EXT_CTRL_EN1, 
 TPS_PDATA_INIT(vio,  0,         1500, 3300, 0, 1, 1, 0, -1, 0, 0, 0, 0);
 
 TPS_PDATA_INIT(ldo1, 0,         1000, 3300, tps6591x_rails(VDD_2), 0, 0, 0, -1, 0, 1, 0, 0);
-TPS_PDATA_INIT(ldo2, 0,         1050, 1050, tps6591x_rails(VDD_2), 0, 0, 1, -1, 0, 1, 0, 0);
+TPS_PDATA_INIT(ldo2, 0,         1050, 3300, tps6591x_rails(VDD_2), 0, 0, 1, -1, 0, 1, 0, 0);
 
 TPS_PDATA_INIT(ldo3, e118x,     1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0);
 TPS_PDATA_INIT(ldo3, e1198,     1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0);
@@ -386,10 +388,10 @@ int __init cardhu_regulator_init(void)
 
 	tegra_get_board_info(&board_info);
 	tegra_get_pmu_board_info(&pmu_board_info);
+	pmu_board_info.sku=1;
 
 	if (pmu_board_info.board_id == BOARD_PMU_PM298)
 		return cardhu_pm298_regulator_init();
-
 	if (pmu_board_info.board_id == BOARD_PMU_PM299)
 		return cardhu_pm299_regulator_init();
 
@@ -430,6 +432,20 @@ int __init cardhu_regulator_init(void)
 	if ((board_info.board_id == BOARD_E1291) &&
 			((board_info.fab == BOARD_FAB_A04) ||
 			 (board_info.fab == BOARD_FAB_A05))) {
+		tps_platform.dev_slp_en = true;
+		tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
+		tps_platform.num_gpioinit_data =
+					ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
+	}
+
+	/* For PM269-alike products: Enable DEV_SLP and enable sleep on GPIO2 */
+	if ((board_info.board_id == BOARD_PM269) &&
+		(!strcmp(tegra3_get_project_name(), "TF201") ||
+		!strcmp(tegra3_get_project_name(), "TF200X") ||
+		!strcmp(tegra3_get_project_name(), "TF200XG") ||
+		!strcmp(tegra3_get_project_name(), "TF202T") ||
+		!strcmp(tegra3_get_project_name(), "TF200"))) {
+		pr_info("TPS6591x GPIO2 was reprogrammed to follow state of SLEEP input\n");
 		tps_platform.dev_slp_en = true;
 		tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
 		tps_platform.num_gpioinit_data =
@@ -594,12 +610,6 @@ static struct regulator_consumer_supply gpio_switch_en_vdd_com_supply[] = {
 };
 static int gpio_switch_en_vdd_com_voltages[] = { 3300};
 
-/* EN_VDD_SDMMC1 from AP GPIO VI_HSYNC D07*/
-static struct regulator_consumer_supply gpio_switch_en_vdd_sdmmc1_supply[] = {
-	REGULATOR_SUPPLY("vddio_sd_slot", "sdhci-tegra.0"),
-};
-static int gpio_switch_en_vdd_sdmmc1_voltages[] = { 3300};
-
 /* EN_3V3_EMMC from AP GPIO SDMMC3_DAT4 D01*/
 static struct regulator_consumer_supply gpio_switch_en_3v3_emmc_supply[] = {
 	REGULATOR_SUPPLY("vdd_emmc_core", NULL),
@@ -709,7 +719,6 @@ GREG_INIT(7, cam3_ldo_en,	cam3_ldo_en,	"vdd_3v3_devices",	0,      0,      TEGRA_
 GREG_INIT(8, en_vdd_com,	en_vdd_com,	"vdd_3v3_devices",	1,      0,      TEGRA_GPIO_PD0,		false,	1,	0,	0,	0);
 GREG_INIT(9, en_3v3_fuse,	en_3v3_fuse,	"vdd_3v3_devices",	0,      0,      TEGRA_GPIO_PL6,		false,	0,	0,	0,	0);
 GREG_INIT(10, en_3v3_emmc,	en_3v3_emmc,	"vdd_3v3_devices",	1,      0,      TEGRA_GPIO_PD1,		false,	1,	0,	0,	0);
-GREG_INIT(11, en_vdd_sdmmc1,	en_vdd_sdmmc1,	"vdd_3v3_devices",	0,      0,      TEGRA_GPIO_PD7,		false,	1,	0,	0,	0);
 GREG_INIT(12, en_3v3_pex_hvdd,	en_3v3_pex_hvdd, "hvdd_pex_pmu",	0,      0,      TEGRA_GPIO_PL7,		false,	0,	0,	0,	0);
 GREG_INIT(13, en_1v8_cam,	en_1v8_cam,	"vdd_gen1v8",		0,      0,      TEGRA_GPIO_PBB4,	false,	0,	0,	0,	0);
 
@@ -795,7 +804,6 @@ GREG_INIT(6, en_vdd_pnl1_pm313,     en_vdd_pnl1,        "vdd_3v3_devices",
 	ADD_GPIO_REG(en_vdd_com),		\
 	ADD_GPIO_REG(en_3v3_fuse),		\
 	ADD_GPIO_REG(en_3v3_emmc),		\
-	ADD_GPIO_REG(en_vdd_sdmmc1),		\
 	ADD_GPIO_REG(en_3v3_pex_hvdd),		\
 	ADD_GPIO_REG(en_1v8_cam),
 
@@ -810,7 +818,6 @@ GREG_INIT(6, en_vdd_pnl1_pm313,     en_vdd_pnl1,        "vdd_3v3_devices",
 	ADD_GPIO_REG(en_vdd_com),		\
 	ADD_GPIO_REG(en_3v3_fuse),		\
 	ADD_GPIO_REG(en_3v3_emmc),		\
-	ADD_GPIO_REG(en_vdd_sdmmc1),		\
 	ADD_GPIO_REG(en_3v3_pex_hvdd),		\
 	ADD_GPIO_REG(en_1v8_cam),
 
@@ -830,7 +837,6 @@ GREG_INIT(6, en_vdd_pnl1_pm313,     en_vdd_pnl1,        "vdd_3v3_devices",
 	ADD_GPIO_REG(en_1v8_cam),		\
 	ADD_GPIO_REG(dis_5v_switch_e118x),	\
 	ADD_GPIO_REG(en_usb1_vbus_oc_e118x),	\
-	ADD_GPIO_REG(en_usb3_vbus_oc_e118x),	\
 	ADD_GPIO_REG(en_vddio_vid_oc_pm269),
 
 #define E1247_DISPLAY_GPIO_REG		\
@@ -851,7 +857,6 @@ GREG_INIT(6, en_vdd_pnl1_pm313,     en_vdd_pnl1,        "vdd_3v3_devices",
 	ADD_GPIO_REG(en_vdd_com),		\
 	ADD_GPIO_REG(en_3v3_fuse),		\
 	ADD_GPIO_REG(en_3v3_emmc),		\
-	ADD_GPIO_REG(en_vdd_sdmmc1),		\
 	ADD_GPIO_REG(en_3v3_pex_hvdd),		\
 	ADD_GPIO_REG(en_1v8_cam),		\
 	ADD_GPIO_REG(dis_5v_switch_e118x),	\
@@ -906,7 +911,6 @@ static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_e1198_a02[] = {
 	ADD_GPIO_REG(en_vdd_com),
 	ADD_GPIO_REG(en_3v3_fuse),
 	ADD_GPIO_REG(en_3v3_emmc),
-	ADD_GPIO_REG(en_vdd_sdmmc1),
 	ADD_GPIO_REG(en_3v3_pex_hvdd),
 	ADD_GPIO_REG(en_1v8_cam),
 	ADD_GPIO_REG(en_usb1_vbus_oc_a03),
@@ -1159,15 +1163,39 @@ void __init cardhu_tsensor_init(void)
 
 int __init cardhu_edp_init(void)
 {
+	/* Temporary initalization, needs to be set to the actual
+	   regulator current */
+	   
+#ifdef CONFIG_ASUS_EDP_POLICY
+
+	const char *project = tegra3_get_project_name();
+
+	pr_info("%s : use asus edp policy\n", __func__);
+
+	if(!strcmp(project, "TF201"))
+	{
+		tegra_init_cpu_edp_limits(5000);
+	}
+	else if(!strcmp(project, "TF200X") || !strcmp(project, "TF200XG") || !strcmp(project, "TF200"))
+	{
+		tegra_init_cpu_edp_limits(6000);
+	}
+#else
+
 	unsigned int regulator_mA;
 
+	pr_info("%s : use default edp policy\n", __func__);
+
 	regulator_mA = get_maximum_cpu_current_supported();
+	
 	if (!regulator_mA) {
 		regulator_mA = 6000; /* regular T30/s */
 	}
-	pr_info("%s: CPU regulator %d mA\n", __func__, regulator_mA);
+	printk("%s: CPU regulator %d mA\n", __func__, regulator_mA);
 
 	tegra_init_cpu_edp_limits(regulator_mA);
+#endif
+
 	return 0;
 }
 #endif
@@ -1203,3 +1231,89 @@ static int __init cardhu_charger_late_init(void)
 
 late_initcall(cardhu_charger_late_init);
 
+unsigned int boot_reason=0;
+void tegra_booting_info(void )
+{
+	static void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
+	unsigned int reg;
+	#define PMC_RST_STATUS_WDT (1)
+	#define PMC_RST_STATUS_SW   (3)
+
+	reg = readl(pmc +0x1b4);
+	printk("tegra_booting_info reg=%x\n",reg );
+
+	if (reg ==PMC_RST_STATUS_SW){
+		boot_reason=PMC_RST_STATUS_SW;
+		printk("tegra_booting_info-SW reboot\n");
+	} else if (reg ==PMC_RST_STATUS_WDT){
+		boot_reason=PMC_RST_STATUS_WDT;
+		printk("tegra_booting_info-watchdog reboot\n");
+	} else{
+		boot_reason=0;
+		printk("tegra_booting_info-normal\n");
+	}
+}
+static void __iomem *watchdog_timer  = IO_ADDRESS(TEGRA_TMR10_BASE);
+static void __iomem *watchdog_source = IO_ADDRESS(TEGRA_WDT0_BASE);
+#define TIMER_PTV			0
+#define TIMER_EN			(1 << 31)
+#define TIMER_PERIODIC			(1 << 30)
+#define TIMER_PCR			0x4
+#define TIMER_PCR_INTR			(1 << 30)
+#define WDT_CFG				(0)
+#define WDT_CFG_TMR_SRC		(0 << 0) /* for TMR10. */
+#define WDT_CFG_PERIOD			(1 << 4)
+#define WDT_CFG_INT_EN			(1 << 12)
+#define WDT_CFG_SYS_RST_EN		(1 << 14)
+#define WDT_CFG_PMC2CAR_RST_EN		(1 << 15)
+#define WDT_CMD				(8)
+#define WDT_CMD_START_COUNTER		(1 << 0)
+#define WDT_CMD_DISABLE_COUNTER	(1 << 1)
+#define WDT_UNLOCK			(0xC)
+#define WDT_UNLOCK_PATTERN		(0xC45A << 0)
+
+void tegra_watchdog_enable(unsigned int timeout)
+{
+#ifndef CONFIG_DEBUG_SLAB
+	u32 val;
+	printk("tegra_watchdog_enable timeout=%u\n",timeout);
+	if (timeout<=0)
+		return;
+	val = (timeout * 1000000ul) / 4;
+	val |= (TIMER_EN | TIMER_PERIODIC);
+	writel(val, watchdog_timer + TIMER_PTV);
+
+	val = WDT_CFG_TMR_SRC | WDT_CFG_PERIOD | WDT_CFG_INT_EN |
+		/*WDT_CFG_SYS_RST_EN|*/ WDT_CFG_PMC2CAR_RST_EN;
+	writel(val, watchdog_source  + WDT_CFG);
+	writel(WDT_CMD_START_COUNTER, watchdog_source  + WDT_CMD);
+#endif
+}
+
+ void tegra_watchdog_disable(void )
+{
+#ifndef CONFIG_DEBUG_SLAB
+	printk("tegra_watchdog_disable\n");
+	writel(WDT_UNLOCK_PATTERN, watchdog_source + WDT_UNLOCK);
+	writel(WDT_CMD_DISABLE_COUNTER, watchdog_source  + WDT_CMD);
+
+	writel(0, watchdog_timer+ TIMER_PTV);
+#endif
+}
+void tegra_watchdog_touch( unsigned int timeout )
+{
+#ifndef CONFIG_DEBUG_SLAB
+	u32 val;
+	printk("tegra_watchdog_touch\n");
+	writel(WDT_UNLOCK_PATTERN, watchdog_source + WDT_UNLOCK);
+	writel(WDT_CMD_DISABLE_COUNTER, watchdog_source  + WDT_CMD);
+	val = (timeout  * 1000000ul) / 4;
+	val |= (TIMER_EN | TIMER_PERIODIC);
+	writel(val, watchdog_timer + TIMER_PTV);
+
+	val = WDT_CFG_TMR_SRC | WDT_CFG_PERIOD | WDT_CFG_INT_EN |
+		/*WDT_CFG_SYS_RST_EN| */ WDT_CFG_PMC2CAR_RST_EN;
+	writel(val, watchdog_source  + WDT_CFG);
+	writel(WDT_CMD_START_COUNTER, watchdog_source  + WDT_CMD);
+#endif
+}

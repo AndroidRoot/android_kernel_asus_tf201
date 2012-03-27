@@ -1055,6 +1055,7 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy, bool is_dpd)
 	val |= UTMIP_XCVR_SETUP_MSB(XCVR_SETUP_MSB_CALIB(xcvr_setup_value));
 	val |= UTMIP_XCVR_LSFSLEW(config->xcvr_lsfslew);
 	val |= UTMIP_XCVR_LSRSLEW(config->xcvr_lsrslew);
+
 #ifndef CONFIG_ARCH_TEGRA_2x_SOC
 	val |= UTMIP_XCVR_HSSLEW_MSB(0x8);
 #endif
@@ -1289,7 +1290,10 @@ static void utmip_setup_pmc_wake_detect(struct tegra_usb_phy *phy)
 	/* Turn over pad configuration to PMC  for line wake events*/
 	val = readl(pmc_base + PMC_SLEEP_CFG);
 	val &= ~UTMIP_WAKE_VAL(inst, ~0);
-	val |= UTMIP_WAKE_VAL(inst, WAKE_VAL_ANY);
+	if (port_speed == TEGRA_USB_PHY_PORT_SPEED_LOW)
+		val |= UTMIP_WAKE_VAL(inst, WAKE_VAL_FSJ);
+	else
+		val |= UTMIP_WAKE_VAL(inst, WAKE_VAL_FSK);
 	val |= UTMIP_RCTRL_USE_PMC(inst) | UTMIP_TCTRL_USE_PMC(inst);
 	val |= UTMIP_MASTER_ENABLE(inst) | UTMIP_FSLS_USE_PMC(inst);
 	writel(val, pmc_base + PMC_SLEEP_CFG);
@@ -2312,6 +2316,15 @@ struct tegra_usb_phy *tegra_usb_phy_open(int instance, void __iomem *regs,
 	if (phy->usb_phy_type == TEGRA_USB_PHY_TYPE_UTMIP) {
 		err = utmip_pad_open(phy);
 		phy->xcvr_setup_value = tegra_phy_xcvr_setup_value(phy->config);
+		//add for TF201 eye diagram for PR devices and the FPC
+		if(phy->instance == 0 ||phy->instance == 2) {
+			if(phy->xcvr_setup_value >= 48) {
+				phy->xcvr_setup_value = phy->xcvr_setup_value - 48;
+			}else{
+				phy->xcvr_setup_value = 0;
+			}
+			pr_info("phy->instance= %d , phy->xcvr_setup_value=%d\n",phy->instance,phy->xcvr_setup_value);
+		}
 		if (err < 0)
 			goto err1;
 	} else if (phy->usb_phy_type == TEGRA_USB_PHY_TYPE_LINK_ULPI) {

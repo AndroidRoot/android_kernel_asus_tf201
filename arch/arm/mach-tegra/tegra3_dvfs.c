@@ -32,7 +32,8 @@ static bool tegra_dvfs_cpu_disabled;
 static bool tegra_dvfs_core_disabled;
 
 static const int cpu_millivolts[MAX_DVFS_FREQS] =
-	{800, 825, 850, 875, 900, 912, 925, 950, 975, 1000, 1025, 1050, 1075, 1100, 1125, 1150, 1200, 1237};
+	 {800, 825, 850, 875, 925, 950, 975, 1000, 1025, 1050, 1075, 1100, 1125, 1150, 1150, 1150, 1200, 1237};
+	//{800, 825, 850, 875, 900, 912, 925, 950, 975, 1000, 1025, 1050, 1075, 1100, 1125, 1150, 1200, 1237};
 
 static const int core_millivolts[MAX_DVFS_FREQS] =
 	{1000, 1050, 1100, 1150, 1200, 1250, 1300};
@@ -144,13 +145,13 @@ static struct dvfs cpu_dvfs_table[] = {
 	CPU_DVFS("cpu_g",  1, 2, MHZ,   1,   1, 720, 720,  880,  880,  880,  880, 1090, 1180, 1200, 1300),
 	CPU_DVFS("cpu_g",  1, 3, MHZ,   1,   1, 800, 800, 1000, 1000, 1000, 1000, 1180, 1230, 1300),
 
-	CPU_DVFS("cpu_g",  2, 1, MHZ,   1,   1, 650, 650,  820,  820,  820,  820, 1000, 1060, 1100, 1200, 1250, 1300, 1330, 1400),
-	CPU_DVFS("cpu_g",  2, 2, MHZ,   1,   1, 720, 720,  880,  880,  880,  880, 1090, 1180, 1200, 1300, 1310, 1350, 1400),
-	CPU_DVFS("cpu_g",  2, 3, MHZ,   1,   1, 800, 800, 1000, 1000, 1000, 1000, 1180, 1230, 1300, 1320, 1350, 1400),
+	CPU_DVFS("cpu_g", 2, 1, MHZ,   1,   1, 650, 650,  820,  820,  820, 1000, 1060, 1100, 1200, 1250, 1300, 1330, 1400,1550,1600),
+	CPU_DVFS("cpu_g", 2, 2, MHZ,   1,   1, 720, 720,  880,  880,  880, 1090, 1180, 1200, 1300, 1310, 1350, 1400,1400,1550,1600),
+	CPU_DVFS("cpu_g", 2, 3, MHZ,   1,   1, 800, 800, 1000, 1000, 1000, 1180, 1230, 1300, 1320, 1350, 1400,1400,1400,1550,1600),
 
-	CPU_DVFS("cpu_g",  3, 1, MHZ,   1,   1, 650, 650,  820,  820,  820,  820, 1000, 1060, 1100, 1200, 1250, 1300, 1330, 1400),
-	CPU_DVFS("cpu_g",  3, 2, MHZ,   1,   1, 720, 720,  880,  880,  880,  880, 1090, 1180, 1200, 1300, 1310, 1350, 1400),
-	CPU_DVFS("cpu_g",  3, 3, MHZ,   1,   1, 800, 800, 1000, 1000, 1000, 1000, 1180, 1230, 1300, 1320, 1350, 1400),
+	CPU_DVFS("cpu_g", 3, 1, MHZ,   1,   1, 1, 1, 820,  820,  820,  820, 1000, 1060, 1100, 1200, 1250, 1300, 1330, 1400, 1550, 1600),
+	CPU_DVFS("cpu_g", 3, 2, MHZ,   1,   1, 1, 1, 880,  880,  880,  880, 1090, 1180, 1200, 1300, 1310, 1350, 1400,1400,1550, 1600),
+	CPU_DVFS("cpu_g", 3, 3, MHZ,   1,   1, 1, 1, 1000, 1000, 1000, 1000, 1180, 1230, 1300, 1320, 1350, 1400,1400,1400,1550, 1600),
 
 	CPU_DVFS("cpu_g",  4, 0, MHZ,   1,   1, 550, 550,  680,  680,  680,  680,  820,  970, 1040, 1080, 1150, 1200, 1280, 1350, 1400, 1500),
 	CPU_DVFS("cpu_g",  4, 1, MHZ,   1,   1, 650, 650,  820,  820,  820,  820, 1000, 1060, 1100, 1200, 1250, 1300, 1360, 1400, 1500),
@@ -407,6 +408,11 @@ static void __init init_dvfs_one(struct dvfs *d, int nominal_mv_index)
 		tegra_init_max_rate(
 			c, d->freqs[nominal_mv_index] * d->freqs_mult);
 	}
+	if(!strncmp(d->clk_name,"cpu_g",strlen("cpu_g"))){
+		d->max_millivolts= d->dvfs_rail->max_millivolts;
+		printk("max_millivolts of cpu_g  is d->max_millivolts =%u\n",d->max_millivolts );
+	}
+	else
 	d->max_millivolts = d->dvfs_rail->nominal_millivolts;
 
 	/*
@@ -484,6 +490,7 @@ static int __init get_cpu_nominal_mv_index(
 			break;
 		}
 	}
+
 
 	BUG_ON(i == 0);
 	if (j == (ARRAY_SIZE(cpu_dvfs_table) - 1))
@@ -747,7 +754,7 @@ core_cap_state_store(struct kobject *kobj, struct kobj_attribute *attr,
 		if (user_core_cap.refcnt == 1)
 			core_cap_enable(true);
 	} else if (user_core_cap.refcnt) {
-		user_core_cap.refcnt--;
+		user_core_cap.refcnt=0;
 		if (user_core_cap.refcnt == 0)
 			core_cap_enable(false);
 	}

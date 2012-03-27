@@ -34,7 +34,12 @@
 #include <linux/input.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/spi/spi.h>
+#if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT)
 #include <linux/i2c/atmel_mxt_ts.h>
+#endif
+#if defined (CONFIG_TOUCHSCREEN_ATMEL_MT_T9)
+#include <linux/i2c/atmel_maxtouch.h>
+#endif
 #include <linux/tegra_uart.h>
 #include <linux/memblock.h>
 #include <linux/spi-tegra.h>
@@ -53,6 +58,7 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <mach/usb_phy.h>
+#include <mach/board-cardhu-misc.h>
 #include <mach/thermal.h>
 #include <mach/pci.h>
 
@@ -187,9 +193,9 @@ static __initdata struct tegra_clk_init_table cardhu_clk_init_table[] = {
 	{ "dam0",	"pll_a_out0",	0,		false},
 	{ "dam1",	"pll_a_out0",	0,		false},
 	{ "dam2",	"pll_a_out0",	0,		false},
+	{ "vi_sensor",	"pll_m",	150000000,	false},
 	{ "audio1",	"i2s1_sync",	0,		false},
 	{ "audio3",	"i2s3_sync",	0,		false},
-	{ "vi_sensor",	"pll_p",	150000000,	false},
 	{ "i2c1",	"pll_p",	3200000,	false},
 	{ "i2c2",	"pll_p",	3200000,	false},
 	{ "i2c3",	"pll_p",	3200000,	false},
@@ -223,7 +229,7 @@ static struct tegra_i2c_platform_data cardhu_i2c1_platform_data = {
 static struct tegra_i2c_platform_data cardhu_i2c2_platform_data = {
 	.adapter_nr	= 1,
 	.bus_count	= 1,
-	.bus_clk_rate	= { 100000, 0 },
+	.bus_clk_rate	= { 400000, 0 },
 	.is_clkon_always = true,
 	.scl_gpio		= {TEGRA_GPIO_PT5, 0},
 	.sda_gpio		= {TEGRA_GPIO_PT6, 0},
@@ -242,7 +248,7 @@ static struct tegra_i2c_platform_data cardhu_i2c3_platform_data = {
 static struct tegra_i2c_platform_data cardhu_i2c4_platform_data = {
 	.adapter_nr	= 3,
 	.bus_count	= 1,
-	.bus_clk_rate	= { 100000, 0 },
+	.bus_clk_rate	= { 93750, 0 },
 	.scl_gpio		= {TEGRA_GPIO_PV4, 0},
 	.sda_gpio		= {TEGRA_GPIO_PV5, 0},
 	.arb_recovery = arb_lost_recovery,
@@ -280,12 +286,29 @@ static struct wm8903_platform_data cardhu_wm8903_pdata = {
 		WM8903_GPIO_NO_CONFIG,
 	},
 };
-
-static struct i2c_board_info __initdata wm8903_board_info = {
-	I2C_BOARD_INFO("wm8903", 0x1a),
-	.platform_data = &cardhu_wm8903_pdata,
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+#ifdef CONFIG_DSP_FM34
+static const struct i2c_board_info cardhu_dsp_board_info[] = {
+	{
+		I2C_BOARD_INFO("dsp_fm34", 0x60),
+	},
 };
+#endif
+
+static struct i2c_board_info __initdata rt5631_board_info = {
+	I2C_BOARD_INFO("rt5631", 0x1a),
+};
+
+static struct i2c_board_info __initdata cardhu_i2c_asuspec_info[] = {
+	{
+		I2C_BOARD_INFO("asuspec", 0x15),
+	},
+	{
+		I2C_BOARD_INFO("asusdec", 0x19),
+	},
+};
+
+
+
 
 static void cardhu_i2c_init(void)
 {
@@ -301,8 +324,12 @@ static void cardhu_i2c_init(void)
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device1);
 
-	i2c_register_board_info(4, &wm8903_board_info, 1);
 	i2c_register_board_info(2, cardhu_i2c_bus3_board_info, 1);
+	i2c_register_board_info(1, cardhu_i2c_asuspec_info, ARRAY_SIZE(cardhu_i2c_asuspec_info));
+	i2c_register_board_info(4, &rt5631_board_info, 1);
+#ifdef CONFIG_DSP_FM34
+	i2c_register_board_info(0, cardhu_dsp_board_info, 1);
+#endif
 }
 
 static struct platform_device *cardhu_uart_devices[] __initdata = {
@@ -401,6 +428,8 @@ static void __init uart_debug_init(void)
 	return;
 }
 
+extern int console_none_on_cmdline;
+
 static void __init cardhu_uart_init(void)
 {
 	struct clk *c;
@@ -426,7 +455,10 @@ static void __init cardhu_uart_init(void)
 
 	/* Register low speed only if it is selected */
 	if (!is_tegra_debug_uartport_hs()) {
-		uart_debug_init();
+		if(!console_none_on_cmdline){
+			uart_debug_init();
+			printk("console_none_on_cmdline+uart_debug_init");
+		}
 		/* Clock enable for the debug channel */
 		if (!IS_ERR_OR_NULL(debug_uart_clk)) {
 			pr_info("The debug console clock name is %s\n",
@@ -536,7 +568,7 @@ static struct tegra_wm8903_platform_data cardhu_audio_pdata = {
 };
 
 static struct platform_device cardhu_audio_device = {
-	.name	= "tegra-snd-wm8903",
+	.name	= "tegra-snd-rt5631",
 	.id	= 0,
 	.dev	= {
 		.platform_data  = &cardhu_audio_pdata,
@@ -589,7 +621,7 @@ static struct platform_device *cardhu_devices[] __initdata = {
 #endif
 	&ram_console_device,
 };
-
+#if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT)
 #define MXT_CONFIG_CRC  0xD62DE8
 static const u8 config[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -663,6 +695,67 @@ static struct i2c_board_info __initdata atmel_i2c_info[] = {
 	}
 };
 
+#endif
+
+#if defined (CONFIG_TOUCHSCREEN_ATMEL_MT_T9)
+static u8 read_chg(void)
+{
+	return gpio_get_value(TOUCH_GPIO_IRQ_ATMEL_T9);
+}
+
+static u8 valid_interrupt(void)
+{
+	return !read_chg();
+}
+
+static struct mxt_platform_data atmel_mxt_info = {
+	/* Maximum number of simultaneous touches to report. */
+	.numtouch = 10,
+	/* TODO: no need for any hw-specific things at init/exit? */
+	.init_platform_hw = NULL,
+	.exit_platform_hw = NULL,
+	.max_x = 1600,
+	.max_y = 1000,
+	.valid_interrupt = &valid_interrupt,
+	.read_chg = &read_chg,
+};
+
+static struct i2c_board_info __initdata atmel_i2c_info[] = {
+	{
+		I2C_BOARD_INFO("maXTouch", MXT_I2C_ADDRESS),
+		.irq = TEGRA_GPIO_TO_IRQ(TOUCH_GPIO_IRQ_ATMEL_T9),
+		.platform_data = &atmel_mxt_info,
+	}
+};
+#endif
+
+#if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
+// Interrupt pin: TEGRA_GPIO_PH4
+// Reset pin: TEGRA_GPIO_PH6
+// Power pin:
+
+#include <linux/i2c/ektf3k.h>
+
+struct elan_ktf3k_i2c_platform_data ts_elan_ktf3k_data[] = {
+        {
+                .version = 0x0001,
+		   .abs_x_min = 0,
+                .abs_x_max = ELAN_X_MAX,   //LG 9.7" Dpin 2368, Spin 2112
+                .abs_y_min = 0,
+                .abs_y_max = ELAN_Y_MAX,   //LG 9.7" Dpin 1728, Spin 1600
+                .intr_gpio = TEGRA_GPIO_PH4,
+        },
+};
+static struct i2c_board_info elan_i2c_devices[] = {
+        {
+                I2C_BOARD_INFO(ELAN_KTF3K_NAME, 0x10),
+                .platform_data = &ts_elan_ktf3k_data,
+                .irq = (INT_GPIO_BASE + TEGRA_GPIO_PH4),
+        },
+
+};
+#endif
+
 static int __init cardhu_touch_init(void)
 {
 	struct board_info BoardInfo;
@@ -680,13 +773,19 @@ static int __init cardhu_touch_init(void)
 	msleep(100);
 
 	tegra_get_board_info(&BoardInfo);
+#if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT)
 	if ((BoardInfo.sku & SKU_TOUCH_MASK) == SKU_TOUCH_2000) {
 		atmel_mxt_info.config = config_sku2000;
 		atmel_mxt_info.config_crc = MXT_CONFIG_CRC_SKU2000;
 	}
-
-	i2c_register_board_info(1, atmel_i2c_info, 1);
-
+#endif
+#if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
+       if(strcmp(tegra3_get_project_name(), "TF200X") == 0 ||
+	    strcmp(tegra3_get_project_name(), "TF200XG") == 0 || 
+	    strcmp(tegra3_get_project_name(), "TF202T") == 0)  	
+           i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
+#endif
+	i2c_register_board_info(TOUCH_BUS_ATMEL_T9, atmel_i2c_info, 1);
 	return 0;
 }
 
@@ -736,7 +835,8 @@ static struct usb_phy_plat_data tegra_usb_phy_pdata[] = {
 	[0] = {
 			.instance = 0,
 			.vbus_gpio = -1,
-			.vbus_reg_supply = "vdd_vbus_micro_usb",
+// Do not use .vbus_reg_supply (This will use GPIO_PI4.) because unused GMI_RST_N(TEGRA_GPIO_PI4) pin by hardware
+//			.vbus_reg_supply = "vdd_vbus_micro_usb",
 	},
 	[1] = {
 			.instance = 1,
@@ -745,7 +845,8 @@ static struct usb_phy_plat_data tegra_usb_phy_pdata[] = {
 	[2] = {
 			.instance = 2,
 			.vbus_gpio = -1,
-			.vbus_reg_supply = "vdd_vbus_typea_usb",
+// Do not use .vbus_reg_supply (This will use GPIO_PH7.) because 5V is controlled by the hardware.
+//			.vbus_reg_supply = "vdd_vbus_typea_usb",
 	},
 };
 
@@ -810,8 +911,9 @@ static void cardhu_usb_init(void)
 		tegra_ehci2_device.dev.platform_data = &tegra_ehci_uhsic_pdata;
 		/* baseband registration happens in baseband-xmm-power  */
 	} else {
-		tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
-		platform_device_register(&tegra_ehci2_device);
+		//Disable the usb2 host controller for wifi version. But the part is must enabled for 3G version.
+		//tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+		//platform_device_register(&tegra_ehci2_device);
 	}
 
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
@@ -961,11 +1063,14 @@ static void cardhu_sata_init(void)
 static void cardhu_sata_init(void) { }
 #endif
 
+extern void tegra_booting_info(void );
 static void __init tegra_cardhu_init(void)
 {
 	tegra_thermal_init(&thermal_data);
 	tegra_clk_init_from_table(cardhu_clk_init_table);
 	cardhu_pinmux_init();
+	cardhu_misc_init();
+       tegra_booting_info( );
 	cardhu_i2c_init();
 	cardhu_spi_init();
 	cardhu_usb_init();
@@ -973,6 +1078,8 @@ static void __init tegra_cardhu_init(void)
 	cardhu_edp_init();
 #endif
 	cardhu_uart_init();
+	snprintf(cardhu_chipid, sizeof(cardhu_chipid), "%016llx",
+		tegra_chip_uid());
 	cardhu_tsensor_init();
 	platform_add_devices(cardhu_devices, ARRAY_SIZE(cardhu_devices));
 	cardhu_sdhci_init();

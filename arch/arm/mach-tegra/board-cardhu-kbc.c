@@ -34,26 +34,23 @@
 #include <mach/io.h>
 #include <mach/iomap.h>
 #include <mach/kbc.h>
+#include <mach/board-cardhu-misc.h>
 #include "board.h"
 #include "board-cardhu.h"
 
 #include "gpio-names.h"
 #include "devices.h"
 
-#define CARDHU_PM269_ROW_COUNT	2
+#define CARDHU_PM269_ROW_COUNT	1
 #define CARDHU_PM269_COL_COUNT	4
 
 static const u32 kbd_keymap[] = {
-	KEY(0, 0, KEY_POWER),
+	KEY(0, 0, KEY_RESERVED),
 	KEY(0, 1, KEY_RESERVED),
 	KEY(0, 2, KEY_VOLUMEUP),
 	KEY(0, 3, KEY_VOLUMEDOWN),
-
-	KEY(1, 0, KEY_HOME),
-	KEY(1, 1, KEY_MENU),
-	KEY(1, 2, KEY_BACK),
-	KEY(1, 3, KEY_SEARCH),
 };
+
 static const struct matrix_keymap_data keymap_data = {
 	.keymap	 = kbd_keymap,
 	.keymap_size    = ARRAY_SIZE(kbd_keymap),
@@ -70,10 +67,9 @@ static struct tegra_kbc_platform_data cardhu_kbc_platform_data = {
 	.debounce_cnt = 20,
 	.repeat_cnt = 1,
 	.scan_count = 30,
-	.wakeup = true,
+	.wakeup = false,
 	.keymap_data = &keymap_data,
-	.wake_cnt = 1,
-	.wake_cfg = &cardhu_wake_cfg[0],
+	.wake_cnt = 0,
 };
 
 int __init cardhu_kbc_init(void)
@@ -96,6 +92,14 @@ int __init cardhu_kbc_init(void)
 		data->pin_cfg[i].en = true;
 	}
 	for (i = 0; i < CARDHU_PM269_COL_COUNT; i++) {
+		/*
+		 * Avoid keypad scan (ROW0,COL0) and (ROW0, COL1)
+		 * KBC-COL1 (GPIO-Q-01) is used for Pad EC request#
+		 * KBC-COL0(GPIO-Q-00) and AP_ONKEY#(GPIO-P-00) are
+		 * both wired with power button, but we configure
+		 * AP_ONKEY pin for power button instead.
+		 */
+		if (i <= 1) continue;
 		data->pin_cfg[i + KBC_PIN_GPIO_16].num = i;
 		data->pin_cfg[i + KBC_PIN_GPIO_16].en = true;
 	}
@@ -174,6 +178,22 @@ static struct platform_device cardhu_keys_e1291_device = {
 	},
 };
 
+static struct gpio_keys_button cardhu_keys_tf201[] = {
+	[0] = GPIO_KEY(KEY_POWER, PV0, 1),
+};
+
+static struct gpio_keys_platform_data cardhu_keys_tf201_platform_data = {
+	.buttons	= cardhu_keys_tf201,
+	.nbuttons	= ARRAY_SIZE(cardhu_keys_tf201),
+};
+
+static struct platform_device cardhu_keys_tf201_device = {
+	.name   = "gpio-keys",
+	.id     = 0,
+	.dev    = {
+		.platform_data  = &cardhu_keys_tf201_platform_data,
+	},
+};
 #define INT_KEY(_id, _irq, _iswake, _deb_int)	\
 	{					\
 		.code = _id,			\
@@ -248,6 +268,18 @@ int __init cardhu_keys_init(void)
 			tegra_gpio_enable(cardhu_keys_e1198[i].gpio);
 
 		platform_device_register(&cardhu_keys_e1198_device);
+	} else if ((board_info.board_id == BOARD_PM269) &&
+		(!strcmp(tegra3_get_project_name(), "TF201") ||
+		!strcmp(tegra3_get_project_name(), "TF200X") ||
+		!strcmp(tegra3_get_project_name(), "TF200XG") ||
+		!strcmp(tegra3_get_project_name(), "TF202T") ||
+		!strcmp(tegra3_get_project_name(), "TF200")))
+	{
+		/* For PM269-alike TF201/TF200X/TF200XG/TF202T/TF200 products */
+		for (i = 0; i < ARRAY_SIZE(cardhu_keys_tf201); i++)
+			tegra_gpio_enable(cardhu_keys_tf201[i].gpio);
+
+		platform_device_register(&cardhu_keys_tf201_device);
 	}
 
 	/* Register on-key through pmu interrupt */
@@ -270,8 +302,7 @@ int __init cardhu_keys_init(void)
 		(board_info.board_id == BOARD_E1257) ||
 		(board_info.board_id == BOARD_E1186) ||
 		(board_info.board_id == BOARD_PM305) ||
-		(board_info.board_id == BOARD_PM311) ||
-		(board_info.board_id == BOARD_PM269))
+		(board_info.board_id == BOARD_PM311))
 		platform_device_register(&cardhu_int_keys_device);
 	return 0;
 }
