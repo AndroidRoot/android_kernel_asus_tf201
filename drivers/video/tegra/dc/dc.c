@@ -52,7 +52,19 @@
 #include "overlay.h"
 #include "nvsd.h"
 
+#include "hdmi_reg.h"
+#include "hdmi.h"
+#include <linux/gpio.h>
+#include "../gpio-names.h"
+
+#include <linux/pwm.h>
+
+extern bool isRecording;
+static struct timeval t_suspend;
+
 #define TEGRA_CRC_LATCHED_DELAY		34
+#define cardhu_bl_enb 58
+#define cardhu_hdmi_hpd			TEGRA_GPIO_PN7
 
 #define DC_COM_PIN_OUTPUT_POLARITY1_INIT_VAL	0x01000000
 #define DC_COM_PIN_OUTPUT_POLARITY3_INIT_VAL	0x0
@@ -489,6 +501,145 @@ remove_out:
 static inline void tegra_dc_create_debugfs(struct tegra_dc *dc) { };
 static inline void __devexit tegra_dc_remove_debugfs(struct tegra_dc *dc) { };
 #endif /* CONFIG_DEBUGFS */
+
+
+#ifdef CONFIG_DEBUG_FS
+#include <linux/uaccess.h>
+
+#define DUMP_HDMI_REG(a) do {	\
+		len = snprintf(bp, dlen, "%-47s   0x%03x  0x%08lx\n",	\
+			#a, a, tegra_hdmi_readl(hdmi, a));		\
+	} while (0)
+
+static ssize_t dbg_hdmi_reg_rw_open(struct inode *inode, struct file *file)
+{
+	file->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t dbg_hdmi_reg_rw_read(struct file *file, char __user *buf, size_t count,
+				loff_t *ppos)
+{
+	int len = 0;
+	int tot = 0;
+	char debug_buf[256];
+	int dlen = sizeof(debug_buf);
+	char *bp = debug_buf;
+
+	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(tegra_dcs[1]);
+
+	printk("%s: buf=%p, count=%d, ppos=%p; *ppos= %d\n", __FUNCTION__, buf, count, ppos, *ppos);
+
+	if (*ppos)
+		return 0;	/* the end */
+
+	if (gpio_get_value(tegra_dcs[1]->out->hotplug_gpio) && (tegra_dcs[1]->enabled == true)){
+		/* dump_reg */
+		len = snprintf(bp, dlen, "%-47s  %s  %10s\n", "HDMI register name", "Offset", "Value");
+		tot += len; bp += len; dlen -= len;
+		DUMP_HDMI_REG(HDMI_NV_PDISP_SOR_LANE_DRIVE_CURRENT);
+		tot += len; bp += len; dlen -= len;
+		DUMP_HDMI_REG(HDMI_NV_PDISP_PE_CURRENT);
+		tot += len; bp += len; dlen -= len;
+	} else {
+		/* Don't dump HDMI registers. Show warnning */
+		len = snprintf(bp, dlen, "No hdmi device? DC is disabled? Do nothing.\n");
+		tot += len; bp += len; dlen -= len;
+	}
+
+	if (copy_to_user(buf, debug_buf, tot))
+		return -EFAULT;
+	if (tot < 0)
+		return 0;
+	*ppos += tot;	/* increase offset */
+	return tot;
+}
+static ssize_t dbg_hdmi_reg_rw_write(struct file *file, char __user *buf, size_t count,
+				loff_t *ppos)
+{
+	char debug_buf[256];
+	int cnt;
+	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(tegra_dcs[1]);
+	char ofst_str[6], val_str[11];
+	unsigned int ofst = 0;
+	unsigned int val = 0;
+
+	printk("%s: buf=%p, count=%d, ppos=%p\n", __FUNCTION__, buf, count, ppos);
+	if (count > sizeof(debug_buf))
+		return -EFAULT;
+	if (copy_from_user(debug_buf, buf, count))
+		return -EFAULT;
+	debug_buf[count] = '\0';	/* end of string */
+	cnt = sscanf(debug_buf, "%s %s", ofst_str, val_str);
+	printk("ofst= \"%s\"; val= \"%s\"\n", ofst_str, val_str);
+
+	/* Str to Int*/
+	if ((ofst_str[0] == '0') && (ofst_str[1] == 'x') && (val_str[0] == '0') && (val_str[1] == 'x')) {
+		/* Parse ofst */
+		int i = 0;
+
+		for (i = 2; i < 5; i++) {
+			if ((ofst_str[i] >= '0') && (ofst_str[i] <= '9'))
+				ofst = ofst * 16 + ofst_str[i] - '0';
+			else if ((ofst_str[i] >= 'a') && (ofst_str[i] <= 'f'))
+				ofst = ofst * 16 + ofst_str[i] - 'a' + 10;
+			else if ((ofst_str[i] >= 'A') && (ofst_str[i] <= 'F'))
+				ofst = ofst * 16 + ofst_str[i] - 'A' + 10;
+			else {
+				break;
+			}
+		}
+
+		/* Parse val */
+		for (i = 2; i < 10; i++) {
+			if ((val_str[i] >= '0') && (val_str[i] <= '9'))
+				val = val*16 + val_str[i] - '0';
+			else if ((val_str[i] >= 'a') && (val_str[i] <= 'f'))
+				val = val*16 + val_str[i] - 'a' + 10;
+			else if ((val_str[i] >= 'A') && (val_str[i] <= 'F'))
+				val = val*16 + val_str[i] - 'A' + 10;
+			else {
+				break;
+			}
+		}
+
+		/* Write the Reg */
+		printk("Offset= %d(0x%x); Value= %d(0x%x)\n", ofst, ofst, val, val);
+		if (ofst <= 0xa3) {
+			tegra_hdmi_writel(hdmi, val, ofst);
+			tegra_hdmi_writel(hdmi, 0x10000200, HDMI_NV_PDISP_SOR_PLL1);
+			printk("reg writing done.\n");
+		} else
+			printk("Do nothing. The upper-bound of offset is 0xa3.\n");
+
+	} else {
+		/* Error format */
+		printk("Wrong Usage. Please add the prefix, \"0x\", for reg Offset & Value.\nThe right usage format is \"echo 0x__ 0x___ > /d/hdmi_reg_rw\"\n");
+	}
+
+	return count;
+}
+static const struct file_operations dbg_hdmi_reg_rw_fops = {
+	.open		= dbg_hdmi_reg_rw_open,
+	.read		= dbg_hdmi_reg_rw_read,
+	.write		= dbg_hdmi_reg_rw_write,
+};
+
+static void tegra_dc_dbg_add(struct tegra_dc *dc)
+{
+	char name[32];
+
+	snprintf(name, sizeof(name), "tegra_dc%d_regs", dc->ndev->id);
+	(void) debugfs_create_file(name, S_IRUGO, NULL, dc, &regs_fops);
+	if(dc->ndev->id == 1) {
+		(void) debugfs_create_file("hdmi_reg_rw", S_IRUGO | S_IWUSR, NULL, dc, &dbg_hdmi_reg_rw_fops);
+	}
+}
+#else
+static void tegra_dc_dbg_add(struct tegra_dc *dc) {}
+
+#endif
+
 
 static int tegra_dc_set(struct tegra_dc *dc, int index)
 {
@@ -2418,6 +2569,16 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 
 static bool _tegra_dc_enable(struct tegra_dc *dc)
 {
+	if (dc->ndev->id == 0) {
+		struct timeval t_resume;
+		int diff_msec = 0;
+		do_gettimeofday(&t_resume);
+		diff_msec = ((t_resume.tv_sec - t_suspend.tv_sec) * 1000000 +(t_resume.tv_usec - t_suspend.tv_usec)) / 1000;
+		printk("Disp: diff_msec= %d\n", diff_msec);
+		if((diff_msec < 1000) && (diff_msec >= 0))
+			msleep(1000 - diff_msec);
+	}
+
 	if (dc->mode.pclk == 0)
 		return false;
 
@@ -2432,6 +2593,9 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 void tegra_dc_enable(struct tegra_dc *dc)
 {
 	mutex_lock(&dc->lock);
+
+	if(isRecording)
+		gpio_set_value(cardhu_bl_enb, 1);
 
 	if (!dc->enabled)
 		dc->enabled = _tegra_dc_enable(dc);
@@ -2526,6 +2690,9 @@ void tegra_dc_blank(struct tegra_dc *dc)
 
 static void _tegra_dc_disable(struct tegra_dc *dc)
 {
+	if (dc->ndev->id == 0) {
+		do_gettimeofday(&t_suspend);
+	}
 	_tegra_dc_controller_disable(dc);
 	tegra_dc_io_end(dc);
 }
@@ -2549,6 +2716,8 @@ void tegra_dc_disable(struct tegra_dc *dc)
 #ifdef CONFIG_SWITCH
 	switch_set_state(&dc->modeset_switch, 0);
 #endif
+	if(isRecording)
+		gpio_set_value(cardhu_bl_enb, 1);
 
 	mutex_unlock(&dc->lock);
 }
@@ -2763,6 +2932,7 @@ static int tegra_dc_probe(struct nvhost_device *ndev)
 		_tegra_dc_enable(dc);
 	mutex_unlock(&dc->lock);
 
+	tegra_dc_dbg_add(dc);
 	tegra_dc_create_debugfs(dc);
 
 	dev_info(&ndev->dev, "probed\n");
@@ -2797,6 +2967,9 @@ static int tegra_dc_probe(struct nvhost_device *ndev)
 		dc->out_ops->detect(dc);
 	else
 		dc->connected = true;
+
+	if(dc->ndev->id ==1)
+		enable_irq_wake(gpio_to_irq(cardhu_hdmi_hpd));
 
 	tegra_dc_create_sysfs(&dc->ndev->dev);
 
@@ -2857,6 +3030,43 @@ static int tegra_dc_remove(struct nvhost_device *ndev)
 	kfree(dc);
 	tegra_dc_set(NULL, ndev->id);
 	return 0;
+}
+
+struct pwm_bl_data {
+	struct pwm_device	*pwm;
+	struct device		*dev;
+	unsigned int		period;
+	unsigned int		lth_brightness;
+	int			(*notify)(struct device *,
+					  int brightness);
+	int			(*check_fb)(struct device *, struct fb_info *);
+};
+static void tegra_dc_shutdown(struct nvhost_device *ndev)
+{
+	printk("%s+, ndev->name=%s ####\n", __func__, ndev->name);
+
+	struct tegra_dc *dc = nvhost_get_drvdata(ndev);
+
+	if (dc->ndev->id == 0) {
+
+		if (dc->out->sd_settings && dc->out->sd_settings->bl_device) {
+
+			struct platform_device *pdev = dc->out->sd_settings->bl_device;
+			struct backlight_device *bl = platform_get_drvdata(pdev);
+			struct pwm_bl_data *pb = dev_get_drvdata(&bl->dev);
+			int brightness = 0;
+
+			if (pb->notify)
+				brightness = pb->notify(pb->dev, brightness);
+			msleep(5);
+			pwm_config(pb->pwm, 0, pb->period);
+			pwm_disable(pb->pwm);
+		}
+
+		if (dc->out && dc->out->disable)
+			dc->out->disable();
+	}
+	printk("%s-, ndev->name=%s ####\n", __func__, ndev->name);
 }
 
 #ifdef CONFIG_PM
@@ -2946,6 +3156,7 @@ struct nvhost_driver tegra_dc_driver = {
 	},
 	.probe = tegra_dc_probe,
 	.remove = tegra_dc_remove,
+	.shutdown = tegra_dc_shutdown,
 #ifdef CONFIG_PM
 	.suspend = tegra_dc_suspend,
 	.resume = tegra_dc_resume,
@@ -2954,9 +3165,12 @@ struct nvhost_driver tegra_dc_driver = {
 
 static int __init tegra_dc_module_init(void)
 {
+	printk(KERN_INFO "%s+ #####\n", __func__);
 	int ret = tegra_dc_ext_module_init();
 	if (ret)
 		return ret;
+
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return nvhost_driver_register(&tegra_dc_driver);
 }
 

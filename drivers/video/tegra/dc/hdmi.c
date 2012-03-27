@@ -267,6 +267,15 @@ const struct tdms_config tdms_config[] = {
 	.pll0 = SOR_PLL_BG_V17_S(3) | SOR_PLL_ICHPMP(1) | SOR_PLL_RESISTORSEL |
 		SOR_PLL_VCOCAP(3) | SOR_PLL_TX_REG_LOAD(0),
 	.pll1 = SOR_PLL_TMDS_TERM_ENABLE | SOR_PLL_PE_EN,
+	.pe_current = PE_CURRENT0(0xf) |
+			PE_CURRENT1(0xf) |
+			PE_CURRENT2(0xf) |
+			PE_CURRENT3(0xf),
+	.drive_current = DRIVE_CURRENT_LANE0(0x0f) |
+			DRIVE_CURRENT_LANE1(0x0f) |
+			DRIVE_CURRENT_LANE2(0x0f) |
+			DRIVE_CURRENT_LANE3(0x0f),
+	/*
 	.pe_current = PE_CURRENT0(PE_CURRENT_5_0_mA) |
 		PE_CURRENT1(PE_CURRENT_5_0_mA) |
 		PE_CURRENT2(PE_CURRENT_5_0_mA) |
@@ -275,6 +284,8 @@ const struct tdms_config tdms_config[] = {
 		DRIVE_CURRENT_LANE1(DRIVE_CURRENT_5_250_mA) |
 		DRIVE_CURRENT_LANE2(DRIVE_CURRENT_5_250_mA) |
 		DRIVE_CURRENT_LANE3(DRIVE_CURRENT_5_250_mA),
+	*/
+
 	},
 };
 #else /*  CONFIG_ARCH_TEGRA_2x_SOC */
@@ -1029,7 +1040,6 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		goto err_free_irq;
 	}
 
-#ifdef CONFIG_TEGRA_NVHDCP
 	hdmi->nvhdcp = tegra_nvhdcp_create(hdmi, dc->ndev->id,
 			dc->out->dcc_bus);
 	if (IS_ERR_OR_NULL(hdmi->nvhdcp)) {
@@ -1037,9 +1047,6 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		err = PTR_ERR(hdmi->nvhdcp);
 		goto err_edid_destroy;
 	}
-#else
-	hdmi->nvhdcp = NULL;
-#endif
 
 	INIT_DELAYED_WORK(&hdmi->work, tegra_dc_hdmi_detect_worker);
 
@@ -1061,9 +1068,7 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 	ret = switch_dev_register(&hdmi->hpd_switch);
 
 	if (!ret)
-		ret = device_create_file(hdmi->hpd_switch.dev,
-			&dev_attr_underscan);
-	WARN(ret, "could not create dev_attr_underscan\n");
+		device_create_file(hdmi->hpd_switch.dev, &dev_attr_underscan);
 #endif
 
 	dc->out->depth = 24;
@@ -1084,9 +1089,7 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 
 	return 0;
 
-#ifdef CONFIG_TEGRA_NVHDCP
 err_edid_destroy:
-#endif
 	tegra_edid_destroy(hdmi->edid);
 err_free_irq:
 	free_irq(gpio_to_irq(dc->out->hotplug_gpio), dc);
