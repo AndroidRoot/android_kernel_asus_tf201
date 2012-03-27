@@ -63,6 +63,9 @@ MODULE_VERSION("1.0");
 
 static const char longname[] = "Gadget Android";
 
+int usb_function_enable = 0;
+EXPORT_SYMBOL(usb_function_enable);
+
 /* Default vendor and product IDs, overridden by userspace */
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
@@ -645,11 +648,11 @@ static struct android_usb_function accessory_function = {
 
 static struct android_usb_function *supported_functions[] = {
 	&adb_function,
-	&acm_function,
+	//&acm_function,
 	&mtp_function,
 	&ptp_function,
 	&rndis_function,
-	&mass_storage_function,
+	//&mass_storage_function,
 	&accessory_function,
 	NULL
 };
@@ -834,10 +837,12 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 					android_bind_config);
 		usb_gadget_connect(cdev->gadget);
 		dev->enabled = true;
+		usb_function_enable = 1;
 	} else if (!enabled && dev->enabled) {
 		usb_gadget_disconnect(cdev->gadget);
 		usb_remove_config(cdev, &android_config_driver);
 		dev->enabled = false;
+		usb_function_enable = 0;
 	} else {
 		pr_err("android_usb: already %s\n",
 				dev->enabled ? "enabled" : "disabled");
@@ -905,6 +910,23 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
+#define DESCRIPTOR_PRODUCT_ATTR(field, buffer)				\
+static ssize_t								\
+field ## _show(struct device *dev, struct device_attribute *attr,	\
+		char *buf)						\
+{									\
+	return sprintf(buf, "%s", buffer);				\
+}									\
+static ssize_t								\
+field ## _store(struct device *dev, struct device_attribute *attr,	\
+		const char *buf, size_t size)		       		\
+{									\
+	if (size >= sizeof(buffer)) return -EINVAL;			\
+	memcpy(buffer, buf, size); 					\
+	buffer[size] = '\0'; 						\
+	return size; 							\
+}									\
+static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
 DESCRIPTOR_ATTR(idVendor, "%04x\n")
 DESCRIPTOR_ATTR(idProduct, "%04x\n")
@@ -913,7 +935,8 @@ DESCRIPTOR_ATTR(bDeviceClass, "%d\n")
 DESCRIPTOR_ATTR(bDeviceSubClass, "%d\n")
 DESCRIPTOR_ATTR(bDeviceProtocol, "%d\n")
 DESCRIPTOR_STRING_ATTR(iManufacturer, manufacturer_string)
-DESCRIPTOR_STRING_ATTR(iProduct, product_string)
+//DESCRIPTOR_STRING_ATTR(iProduct, product_string)
+DESCRIPTOR_PRODUCT_ATTR(iProduct, product_string)
 DESCRIPTOR_STRING_ATTR(iSerial, serial_string)
 
 static DEVICE_ATTR(functions, S_IRUGO | S_IWUSR, functions_show, functions_store);
