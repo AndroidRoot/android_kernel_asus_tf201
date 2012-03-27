@@ -823,7 +823,9 @@ static int usb_stor_scan_thread(void * __us)
 	struct device *dev = &us->pusb_intf->dev;
 
 	dev_dbg(dev, "device found\n");
-
+	wake_lock_init(&us->scsi_scan_wake_lock, WAKE_LOCK_SUSPEND, us->scsi_name);
+	wake_lock(&us->scsi_scan_wake_lock);
+	printk("%s wake_lock_init +\n", us->scsi_name);
 	set_freezable();
 	/* Wait for the timeout to expire or for a disconnect */
 	if (delay_use > 0) {
@@ -846,12 +848,16 @@ static int usb_stor_scan_thread(void * __us)
 		}
 		scsi_scan_host(us_to_host(us));
 		dev_dbg(dev, "scan complete\n");
-
 		/* Should we unbind if no devices were detected? */
 	}
 
+	wake_unlock(&us->scsi_scan_wake_lock);
+	wake_lock_destroy(&us->scsi_scan_wake_lock);
+	printk("%s wake_lock_destroy -\n", us->scsi_name);
+
 	usb_autopm_put_interface(us->pusb_intf);
 	complete_and_exit(&us->scanning_done, 0);
+
 }
 
 static unsigned int usb_stor_sg_tablesize(struct usb_interface *intf)
@@ -963,6 +969,7 @@ int usb_stor_probe2(struct us_data *us)
 		goto BadDevice;
 	snprintf(us->scsi_name, sizeof(us->scsi_name), "usb-storage %s",
 					dev_name(&us->pusb_intf->dev));
+
 	result = scsi_add_host(us_to_host(us), dev);
 	if (result) {
 		dev_warn(dev,
