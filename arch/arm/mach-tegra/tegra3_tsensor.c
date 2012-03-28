@@ -20,7 +20,7 @@
 #ifdef CONFIG_SENSORS_TEGRA_TSENSOR
 #include <mach/tsensor.h>
 #include <mach/tegra_fuse.h>
-#include <devices.h>
+#include "devices.h"
 #include <mach/iomap.h>
 #include <mach/thermal.h>
 #include <linux/io.h>
