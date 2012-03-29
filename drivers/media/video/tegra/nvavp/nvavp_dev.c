@@ -44,7 +44,6 @@
 
 #include "../../../../video/tegra/nvmap/nvmap.h"
 #include "../../../../video/tegra/host/t20/syncpt_t20.h"
-#include "../../../../video/tegra/host/nvhost_acm.h"
 #include "../../../../video/tegra/host/dev.h"
 #include "../../../../video/tegra/host/nvhost_acm.h"
 
@@ -798,8 +797,8 @@ static int nvavp_set_clock_ioctl(struct file *filp, unsigned int cmd,
 	if (copy_from_user(&config, (void __user *)arg, sizeof(struct nvavp_clock_args)))
 		return -EFAULT;
 
-	dev_dbg(&nvavp->nvhost_dev->dev, "%s: clk_id=%d, clk_rate=%lu\n",
-			__func__, config.id, config.rate);
+	dev_dbg(&nvavp->nvhost_dev->dev, "%s: clk_id=%d, clk_rate=%u\n",
+			__func__, config.id, (unsigned)config.rate);
 
 	if (config.id == NVAVP_MODULE_ID_AVP)
 		nvavp->sclk_rate = config.rate;
@@ -1132,8 +1131,6 @@ static int tegra_nvavp_probe(struct nvhost_device *ndev)
 		goto err_get_syncpt;
 	}
 
-	nvhost_module_busy(&ndev->host->mod);
-
 	nvavp->nvmap = nvmap_create_client(nvmap_dev, "nvavp_drv");
 	if (IS_ERR_OR_NULL(nvavp->nvmap)) {
 		dev_err(&ndev->dev, "cannot create nvmap client\n");
@@ -1346,7 +1343,6 @@ static int tegra_nvavp_remove(struct nvhost_device *ndev)
 	clk_put(nvavp->bsev_clk);
 	clk_put(nvavp->vde_clk);
 	clk_put(nvavp->cop_clk);
-	nvhost_module_idle(&ndev->host->mod);
 
 	clk_put(nvavp->emc_clk);
 	clk_put(nvavp->sclk);
