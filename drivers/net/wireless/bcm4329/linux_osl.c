@@ -155,10 +155,9 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 	gfp_t flags;
 
 	flags = (in_atomic()) ? GFP_ATOMIC : GFP_KERNEL;
-	osh = kmalloc(sizeof(osl_t), flags);
+	osh = kzalloc(sizeof(osl_t), flags);
 	ASSERT(osh);
 
-	bzero(osh, sizeof(osl_t));
 
 	
 	ASSERT(ABS(BCME_LAST) == (ARRAYSIZE(linuxbcmerrormap) - 1));
@@ -194,7 +193,7 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 	if (!bcm_static_buf) {
 		if (!(bcm_static_buf = (bcm_static_buf_t *)dhd_os_prealloc(3, STATIC_BUF_SIZE+
 			STATIC_BUF_TOTAL_LEN))) {
-			printf("can not alloc static buf!\n");
+			printk("can not alloc static buf!\n");
 		}
 		else {
 			/* printk("alloc static buf at %x!\n", (unsigned int)bcm_static_buf); */
@@ -302,7 +301,7 @@ osl_pktget_static(osl_t *osh, uint len)
 	
 	if (len > (PAGE_SIZE*2))
 	{
-		printf("Do we really need this big skb??\n");
+		printk("Do we really need this big skb??\n");
 		return osl_pktget(osh, len);
 	}
 
@@ -351,7 +350,7 @@ osl_pktget_static(osl_t *osh, uint len)
 
 	
 	mutex_unlock(&bcm_static_skb->osl_pkt_sem);
-	printf("all static pkt in use!\n");
+	printk("all static pkt in use!\n");
 	return osl_pktget(osh, len);
 }
 
@@ -480,7 +479,7 @@ osl_malloc(osl_t *osh, uint size)
 			if (i == MAX_STATIC_BUF_NUM)
 			{
 				mutex_unlock(&bcm_static_buf->static_sem);
-				printf("all static buff in use!\n");
+				printk("all static buff in use!\n");
 				goto original;
 			}
 			

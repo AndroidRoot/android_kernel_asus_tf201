@@ -12,22 +12,15 @@ config BCMDHD
 
 config BCMDHD_FW_DIR
 	depends on BCMDHD
-	string "Firmware directory"
+	string "Firmware path"
 	default "/system/vendor/firmware"
 	---help---
 	  Path to the firmware file.
 
 config BCMDHD_NVRAM_DIR
 	depends on BCMDHD
-	string "NVRAM directory"
-	default "/system/etc"
-	---help---
-	  Path to the calibration file.
-
-config BCMDHD_NVRAM_PATH
-	depends on BCMDHD
 	string "NVRAM path"
-	default "/system/etc/nvram.txt"
+	default "/system/etc"
 	---help---
 	  Path to the calibration file.
 
