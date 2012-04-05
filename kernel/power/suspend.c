@@ -104,18 +104,7 @@ static int suspend_prepare(void)
 	if (error)
 		goto Finish;
 
-	/* Add a workaround to reset the system (causing a reboot) after
-	 * timeout occurs. We met suspect system hang in try_to_freeze_tasks()
-	 * without return even in successful case (When this issue occurs, dmesg
-	 * looks like "Freezing user space processes ... (elapsed 0.02 seconds)"
-	 * without proper "done" in the tail, or "Freezing remaining freezable
-	 * tasks ... (elapsed 0.01 seconds) without proper "done" either.
-	 *
-	 * FIXME: Figure out the root cause of this system hang.
-	 */
-	freezer_expire_start();
 	error = suspend_freeze_processes();
-	freezer_expire_finish("freeze processes");
 	if (!error)
 		return 0;
 
@@ -231,13 +220,11 @@ int suspend_devices_and_enter(suspend_state_t state)
 	}
 	suspend_console();
 	suspend_test_start();
-	suspend_expire_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
 		printk(KERN_ERR "PM: Some devices failed to suspend\n");
 		goto Recover_platform;
 	}
-	suspend_expire_finish("suspend devices");
 	suspend_test_finish("suspend devices");
 	if (suspend_test(TEST_DEVICES))
 		goto Recover_platform;
@@ -246,9 +233,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 
  Resume_devices:
 	suspend_test_start();
-	suspend_expire_start();
 	dpm_resume_end(PMSG_RESUME);
-	suspend_expire_finish("resume devices");
 	suspend_test_finish("resume devices");
 	resume_console();
  Close:

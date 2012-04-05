@@ -428,8 +428,6 @@ static void __init uart_debug_init(void)
 	return;
 }
 
-extern int console_none_on_cmdline;
-
 static void __init cardhu_uart_init(void)
 {
 	struct clk *c;
@@ -455,10 +453,6 @@ static void __init cardhu_uart_init(void)
 
 	/* Register low speed only if it is selected */
 	if (!is_tegra_debug_uartport_hs()) {
-		if(!console_none_on_cmdline){
-			uart_debug_init();
-			printk("console_none_on_cmdline+uart_debug_init");
-		}
 		/* Clock enable for the debug channel */
 		if (!IS_ERR_OR_NULL(debug_uart_clk)) {
 			pr_info("The debug console clock name is %s\n",

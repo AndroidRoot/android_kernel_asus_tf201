@@ -318,7 +318,7 @@ void kernel_restart_prepare(char *cmd)
 	sysdev_shutdown();
 	syscore_shutdown();
 }
- extern void disable_auto_hotplug(void);
+
 /**
  *	kernel_restart - reboot the system
  *	@cmd: pointer to buffer containing command to execute for restart
@@ -329,7 +329,6 @@ void kernel_restart_prepare(char *cmd)
  */
 void kernel_restart(char *cmd)
 {
-	disable_auto_hotplug();
 	kernel_restart_prepare(cmd);
 	if (!cmd)
 		printk(KERN_EMERG "Restarting system.\n");
@@ -369,10 +368,8 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  *
  *	Shutdown everything and perform a clean system power_off.
  */
-
 void kernel_power_off(void)
 {
-	disable_auto_hotplug();
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();

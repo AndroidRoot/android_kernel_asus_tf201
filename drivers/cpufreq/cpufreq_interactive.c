@@ -27,14 +27,10 @@
 #include <linux/kthread.h>
 
 #include <asm/cputime.h>
-#include <linux/input.h>
-#include <linux/slab.h>
-#include <linux/ktime.h>
 
-extern void set_up2g0_delay(int delay);
 static void (*pm_idle_old)(void);
 static atomic_t active_count = ATOMIC_INIT(0);
-static ktime_t freq_change_time_input;
+
 struct cpufreq_interactive_cpuinfo {
 	struct timer_list cpu_timer;
 	int timer_idlecancel;
@@ -49,7 +45,7 @@ struct cpufreq_interactive_cpuinfo {
 	unsigned int target_freq;
 	int governor_enabled;
 };
-static DEFINE_MUTEX(dbs_mutex);
+
 static DEFINE_PER_CPU(struct cpufreq_interactive_cpuinfo, cpuinfo);
 
 /* Workqueues handle frequency scaling */
@@ -81,9 +77,8 @@ static unsigned long sustain_load;
  * The minimum amount of time to spend at a frequency before we can ramp down.
  */
 #define DEFAULT_MIN_SAMPLE_TIME 80000;
-#define DEFAULT_MIN_SAMPLE_INPUT_TIME 1500000;
 static unsigned long min_sample_time;
-static unsigned long min_sample_input_time;
+
 #define DEBUG 0
 #define BUFSZ 128
 
@@ -202,6 +197,7 @@ static unsigned int cpufreq_interactive_get_target(
 			return policy->max;
 
 		target_freq = policy->cur * boost_factor;
+
 		if (max_boost && target_freq > policy->cur + max_boost)
 			target_freq = policy->cur + max_boost;
 	}
@@ -525,12 +521,9 @@ static int cpufreq_interactive_up_task(void *data)
 
 			smp_rmb();
 
-			if (!pcpu->governor_enabled ||
-			( cpu==0 && ktime_to_us(ktime_sub(ktime_get(), freq_change_time_input)) <
-				min_sample_input_time))
+			if (!pcpu->governor_enabled)
 				continue;
-			if (pcpu->governor_enabled && cpu==0 )
-				set_up2g0_delay(200);
+
 			__cpufreq_driver_target(pcpu->policy,
 						pcpu->target_freq,
 						CPUFREQ_RELATION_H);
@@ -561,13 +554,8 @@ static void cpufreq_interactive_freq_down(struct work_struct *work)
 
 		smp_rmb();
 
-		if (!pcpu->governor_enabled ||
-			( cpu==0 && ktime_to_us(ktime_sub(ktime_get(), freq_change_time_input)) <
-                                min_sample_input_time))
+		if (!pcpu->governor_enabled)
 			continue;
-
-		if (pcpu->governor_enabled && cpu==0 )
-			set_up2g0_delay(200);
 
 		__cpufreq_driver_target(pcpu->policy,
 					pcpu->target_freq,
@@ -593,8 +581,9 @@ static ssize_t store_go_maxspeed_load(struct kobject *kobj,
 	return -EINVAL;
 }
 
-static struct global_attr go_maxspeed_load_attr = __ATTR(go_maxspeed_load, 0644,
+static struct global_attr go_maxspeed_load_attr = __ATTR(go_maxspeed_load, 0666,
 		show_go_maxspeed_load, store_go_maxspeed_load);
+
 static ssize_t show_boost_factor(struct kobject *kobj,
 				     struct attribute *attr, char *buf)
 {
@@ -626,26 +615,9 @@ static ssize_t store_max_boost(struct kobject *kobj,
 	return -EINVAL;
 }
 
-static struct global_attr max_boost_attr = __ATTR(max_boost, 0644,
+static struct global_attr max_boost_attr = __ATTR(max_boost, 0666,
 		show_max_boost, store_max_boost);
 
-static ssize_t show_min_sample_input_time(struct kobject *kobj,
-				     struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%lu\n", min_sample_input_time);
-}
-
-static ssize_t store_min_sample_input_time(struct kobject *kobj,
-			struct attribute *attr, const char *buf, size_t count)
-{
-	mutex_lock(&dbs_mutex);
-	strict_strtoul(buf, 0, &min_sample_input_time);
-	mutex_unlock(&dbs_mutex);
-	return count;
-}
-
-static struct global_attr min_sample_input_time_attr = __ATTR(min_sample_input_time, 0644,
-		show_min_sample_input_time, store_min_sample_input_time);
 
 static ssize_t show_sustain_load(struct kobject *kobj,
 				     struct attribute *attr, char *buf)
@@ -687,99 +659,12 @@ static struct attribute *interactive_attributes[] = {
 	&max_boost_attr.attr,
 	&sustain_load_attr.attr,
 	&min_sample_time_attr.attr,
-	&min_sample_input_time_attr.attr,
 	NULL,
 };
 
 static struct attribute_group interactive_attr_group = {
 	.attrs = interactive_attributes,
 	.name = "interactive",
-};
-
-static void dbs_refresh_callback(struct work_struct *unused)
-{
-	struct cpufreq_interactive_cpuinfo *pcpu;
-	//only scale the freq to max on CPU0:
-	pcpu = &per_cpu(cpuinfo, 0);
-	if (!pcpu->governor_enabled)
-		return;
-
-	/*spin_lock_irqsave(&up_cpumask_lock, flags);
-	cpumask_set_cpu(0, &up_cpumask);
-	spin_unlock_irqrestore(&up_cpumask_lock, flags);*/
-	//printk("cur:%d\n",pcpu->policy->cur);
-	freq_change_time_input = ktime_get();
-	if (pcpu->policy->cur < pcpu->policy->max-200000) {//minus 200Mhz for now
-		pcpu->target_freq = pcpu->policy->max;
-		set_up2g0_delay(0);
-		__cpufreq_driver_target(pcpu->policy,
-						pcpu->target_freq,
-						CPUFREQ_RELATION_H);
-		pcpu->freq_change_time_in_idle =
-				get_cpu_idle_time_us(0, &pcpu->freq_change_time);
-		//printk("UP!!! %d: set tgt=%d (actual=%d)\n", 0, pcpu->target_freq, pcpu->policy->cur);
-	}
-}
-
-static DECLARE_WORK(dbs_refresh_work, dbs_refresh_callback);
-
-static void dbs_input_event(struct input_handle *handle, unsigned int type,
-		unsigned int code, int value)
-{
-	schedule_work(&dbs_refresh_work);
-}
-
-static int dbs_input_connect(struct input_handler *handler,
-		struct input_dev *dev, const struct input_device_id *id)
-{
-	struct input_handle *handle;
-	int error;
-
-	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
-	if (!handle)
-		return -ENOMEM;
-
-	handle->dev = dev;
-	handle->handler = handler;
-	handle->name = "cpufreq";
-
-	error = input_register_handle(handle);
-	if (error)
-		goto err2;
-
-	error = input_open_device(handle);
-	if (error)
-		goto err1;
-
-	return 0;
-err1:
-	input_unregister_handle(handle);
-err2:
-	kfree(handle);
-	return error;
-}
-
-static void dbs_input_disconnect(struct input_handle *handle)
-{
-	input_close_device(handle);
-	input_unregister_handle(handle);
-	kfree(handle);
-}
-
-static const struct input_device_id dbs_ids[] = {
-	{
-		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
-		.evbit = { BIT_MASK(EV_TOUCH) },
-	},
-	{ },
-};
-
-static struct input_handler dbs_input_handler = {
-	.event		= dbs_input_event,
-	.connect	= dbs_input_connect,
-	.disconnect	= dbs_input_disconnect,
-	.name		= "cpufreq_interactive",
-	.id_table	= dbs_ids,
 };
 
 static int cpufreq_governor_interactive(struct cpufreq_policy *new_policy,
@@ -818,10 +703,6 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *new_policy,
 
 		rc = sysfs_create_group(cpufreq_global_kobject,
 				&interactive_attr_group);
-		if(new_policy->cpu == 0){
-			freq_change_time_input = ktime_get();
-			input_register_handler(&dbs_input_handler);
-		}
 		if (rc)
 			return rc;
 
@@ -841,8 +722,7 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *new_policy,
 		 * that is trying to run.
 		 */
 		pcpu->idle_exit_time = 0;
-		if(new_policy->cpu == 0)
-			input_unregister_handler(&dbs_input_handler);
+
 		if (atomic_dec_return(&active_count) > 0)
 			return 0;
 
@@ -872,7 +752,7 @@ static int __init cpufreq_interactive_init(void)
 
 	go_maxspeed_load = DEFAULT_GO_MAXSPEED_LOAD;
 	min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
-	min_sample_input_time = DEFAULT_MIN_SAMPLE_INPUT_TIME;
+
 	/* Initalize per-cpu timers */
 	for_each_possible_cpu(i) {
 		pcpu = &per_cpu(cpuinfo, i);

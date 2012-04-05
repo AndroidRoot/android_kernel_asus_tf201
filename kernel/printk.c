@@ -141,8 +141,6 @@ static int selected_console = -1;
 static int preferred_console = -1;
 int console_set_on_cmdline;
 EXPORT_SYMBOL(console_set_on_cmdline);
-int console_none_on_cmdline = 0;
-EXPORT_SYMBOL(console_none_on_cmdline);
 
 /* Flag: console code may call schedule() */
 static int console_may_schedule;
@@ -1079,9 +1077,6 @@ static int __init console_setup(char *str)
 			break;
 	idx = simple_strtoul(s, NULL, 10);
 	*s = 0;
-
-	if (!strcmp(buf, "none"))
-		console_none_on_cmdline = 1;
 
 	__add_preferred_console(buf, idx, options, brl_options);
 	console_set_on_cmdline = 1;

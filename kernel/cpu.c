@@ -192,19 +192,12 @@ struct take_cpu_down_param {
 	void *hcpu;
 };
 
-extern int __cpuinit migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu);
-extern  struct notifier_block __cpuinitdata migration_notifier;
 /* Take this CPU down. */
 static int __ref take_cpu_down(void *_param)
 {
 	struct take_cpu_down_param *param = _param;
 	int err;
 
-	err=migration_call(&migration_notifier, CPU_DYING | param->mod, param->hcpu);
-	if(err==NOTIFY_BAD){
-		printk("[Warning]take_cpu_down: CPU%lu donw failed!\n",(long)param->hcpu);
-		return err ;
-	}
 	/* Ensure this CPU doesn't handle any more interrupts. */
 	err = __cpu_disable();
 	if (err < 0)
@@ -445,7 +438,7 @@ void __weak arch_enable_nonboot_cpus_begin(void)
 void __weak arch_enable_nonboot_cpus_end(void)
 {
 }
-extern u64 global_wake_status;
+
 void __ref enable_nonboot_cpus(void)
 {
 	int cpu, error;
@@ -453,9 +446,6 @@ void __ref enable_nonboot_cpus(void)
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();
 	cpu_hotplug_disabled = 0;
-	if(!global_wake_status)
-		cpumask_clear(frozen_cpus);
-
 	if (cpumask_empty(frozen_cpus))
 		goto out;
 

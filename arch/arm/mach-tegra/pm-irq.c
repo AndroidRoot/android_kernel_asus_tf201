@@ -29,6 +29,7 @@
 #include <mach/iomap.h>
 
 #include "pm-irq.h"
+
 #include "wakeups-t3.h"
 
 #define PMC_CTRL		0x0
@@ -109,7 +110,7 @@ static inline void write_pmc_wake_level(u64 value)
 #endif
 }
 
- inline u64 read_pmc_wake_status(void)
+static inline u64 read_pmc_wake_status(void)
 {
 	u64 reg;
 

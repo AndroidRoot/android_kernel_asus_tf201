@@ -47,7 +47,6 @@ static struct mutex *tegra3_cpu_lock;
 
 static struct workqueue_struct *hotplug_wq;
 static struct delayed_work hotplug_work;
-static struct delayed_work cpu_down_work;
 
 static bool no_lp;
 module_param(no_lp, bool, 0644);
@@ -55,10 +54,6 @@ module_param(no_lp, bool, 0644);
 static unsigned long up2gn_delay;
 static unsigned long up2g0_delay;
 static unsigned long down_delay;
-void set_up2g0_delay(int delay)
-{
-	up2g0_delay = msecs_to_jiffies(delay?UP2G0_DELAY_MS:0);
-}
 module_param(up2gn_delay, ulong, 0644);
 module_param(up2g0_delay, ulong, 0644);
 module_param(down_delay, ulong, 0644);
@@ -180,55 +175,8 @@ static struct kernel_param_ops tegra_hp_state_ops = {
 	.get = hp_state_get,
 };
 module_param_cb(auto_hotplug, &tegra_hp_state_ops, &hp_state, 0644);
-static int hotplug_num=0xFF;
-static void tegra_cpu_down_work_func(struct work_struct *work)
-{
-	unsigned int cpu=0;
-	int count= num_online_cpus()-hotplug_num;
-	do{
-		cpu=tegra_get_slowest_cpu_n();
-		printk(" tegra_cpu_down_work_func cpu=%u smp=%u count=%u+  \n",cpu,smp_processor_id(),count);
-		if (cpu && (cpu < nr_cpu_ids) &&(num_online_cpus() > hotplug_num ))
-			cpu_down(cpu);
-		printk(" tegra_cpu_down_work_func cpu=%u  smp=%p- \n",cpu);
-	}while(--count);
-}
 
-static int hotplug_state_set(const char *arg, const struct kernel_param *kp)
-{
-	int ret = 0;
 
-	if (!tegra3_cpu_lock)
-		return ret;
-
-	//mutex_lock(tegra3_cpu_lock);
-
-	ret = param_set_int(arg, kp);
-
-	if (ret == 0) {
-		if(hotplug_num> nr_cpu_ids)
-			hotplug_num=nr_cpu_ids;
-		else if (hotplug_num <=0)
-			hotplug_num=1;
-		printk("hotplug_state_set hotplug_state_set=%u num_online_cpus=%u\n",hotplug_num,num_online_cpus());
-		/*if(num_online_cpus() > hotplug_num ){
-			printk("hotplug_state_set count=%u\n",num_online_cpus()-hotplug_num);
-			queue_delayed_work(hotplug_wq, &cpu_down_work, 3*HZ);
-		}*/
-	}
-	//mutex_unlock(tegra3_cpu_lock);
-	return ret;
-}
-static int hotplug_state_get(char *buffer, const struct kernel_param *kp)
-{
-	return param_get_int(buffer, kp);
-}
-
-static struct kernel_param_ops tegra_hotplug_state_ops = {
-	.set = hotplug_state_set,
-	.get = hotplug_state_get,
-};
-module_param_cb(max_hotplug_num, &tegra_hotplug_state_ops, &hotplug_num, 0644);
 enum {
 	TEGRA_CPU_SPEED_BALANCED,
 	TEGRA_CPU_SPEED_BIASED,
@@ -258,11 +206,7 @@ static noinline int tegra_cpu_speed_balance(void)
 
 	return TEGRA_CPU_SPEED_BALANCED;
 }
-void disable_auto_hotplug(void)
-{
-	hp_state=TEGRA_HP_DISABLED;
-	cancel_delayed_work(&hotplug_work);
-}
+
 static void tegra_auto_hotplug_work_func(struct work_struct *work)
 {
 	bool up = false;
@@ -334,16 +278,8 @@ static void tegra_auto_hotplug_work_func(struct work_struct *work)
 	mutex_unlock(tegra3_cpu_lock);
 
 	if (cpu < nr_cpu_ids) {
-		/*if (up)
+		if (up)
 			cpu_up(cpu);
-		else
-			cpu_down(cpu);*/
-		if (up){
-			if (num_online_cpus() < hotplug_num)
-			cpu_up(cpu);
-		else
-			     printk("tegra_auto_hotplug_work_func: need up , but hotplug_num=%u num_online_cpus()=%u  \n",hotplug_num, num_online_cpus());
-		}
 		else
 			cpu_down(cpu);
 	}
@@ -421,7 +357,6 @@ int tegra_auto_hotplug_init(struct mutex *cpu_lock)
 	if (!hotplug_wq)
 		return -ENOMEM;
 	INIT_DELAYED_WORK(&hotplug_work, tegra_auto_hotplug_work_func);
-	INIT_DELAYED_WORK(&cpu_down_work, tegra_cpu_down_work_func);
 
 	cpu_clk = clk_get_sys(NULL, "cpu");
 	cpu_g_clk = clk_get_sys(NULL, "cpu_g");
