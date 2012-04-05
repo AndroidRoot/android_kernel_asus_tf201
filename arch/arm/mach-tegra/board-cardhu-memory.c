@@ -8076,7 +8076,9 @@ int cardhu_emc_init(void)
 	return 0;
 
 err_handle:
-	if(tegra_init_emc(dvfs_TF201_500MHZ,
+	/* Remove error handeling code for now 
+         *
+        if(tegra_init_emc(dvfs_TF201_500MHZ,
 			ARRAY_SIZE(dvfs_TF201_500MHZ))){
 		printk("[unknow board id]select dvfs_TF201_500MHZ \n");
 	}
@@ -8084,6 +8086,7 @@ err_handle:
 			ARRAY_SIZE(elpida_1GB_EDB8132B2MA_8D_lpddr2_400MHz))){
 		printk("[unknow board id]select elpida_1GB_EDB8132B2MA_8D_lpddr2_400MHz \n");
 	}
+         */
 
 	return 0;
 }
