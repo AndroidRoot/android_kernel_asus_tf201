@@ -67,22 +67,6 @@ struct regulator_map {
 	struct regulator_dev *regulator;
 };
 
-/*
- * struct regulator
- *
- * One for each consumer device.
- */
-struct regulator {
-	struct device *dev;
-	struct list_head list;
-	int uA_load;
-	int min_uV;
-	int max_uV;
-	char *supply_name;
-	struct device_attribute dev_attr;
-	struct regulator_dev *rdev;
-};
-
 static int _regulator_is_enabled(struct regulator_dev *rdev);
 static int _regulator_disable(struct regulator_dev *rdev);
 static int _regulator_get_voltage(struct regulator_dev *rdev);

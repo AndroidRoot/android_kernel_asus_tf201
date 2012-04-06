@@ -32,6 +32,22 @@ enum regulator_status {
 	REGULATOR_STATUS_STANDBY,
 };
 
+/*
+ * struct regulator
+ *
+ * One for each consumer device.
+ */
+struct regulator {
+	struct device *dev;
+	struct list_head list;
+	int uA_load;
+	int min_uV;
+	int max_uV;
+	char *supply_name;
+	struct device_attribute dev_attr;
+	struct regulator_dev *rdev;
+};
+
 /**
  * struct regulator_ops - regulator operations.
  *
