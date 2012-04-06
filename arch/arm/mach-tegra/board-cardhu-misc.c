@@ -94,24 +94,14 @@ EXPORT_SYMBOL(tegra3_get_project_name);
 unsigned int tegra3_query_touch_module_pcbid(void)
 {
 	unsigned int touch_pcbid = 0;
-	const char *project = tegra3_get_project_name();
 	unsigned int ret = -1;
 
-	/* Check if running target platform is TF200X or TF200XG*/
-	if ((!strncmp(project, "TF200X", TEGRA3_PROJECT_NAME_MAX_LEN)) ||
-		(!strncmp(project, "TF200XG", TEGRA3_PROJECT_NAME_MAX_LEN))) {
-		pr_err("[MISC]: %s is not supported on %s.\n", __func__, project);
-		return ret;
-	}
 
 	/* Fetch PCB_ID[2] and PCB_ID[6] and recompose it */
 	touch_pcbid = (HW_DRF_VAL(TEGRA3_DEVKIT, MISC_HW, TOUCHL, cardhu_pcbid)) +
 		(HW_DRF_VAL(TEGRA3_DEVKIT, MISC_HW, TOUCHH, cardhu_pcbid) << 1);
 
-	if ((!strncmp(project, "TF201", TEGRA3_PROJECT_NAME_MAX_LEN)) ||
-		(!strncmp(project, "TF202T", TEGRA3_PROJECT_NAME_MAX_LEN))) {
-		ret = touch_pcbid;
-	}
+	ret = touch_pcbid;
 
 	return ret;
 }
@@ -120,22 +110,7 @@ EXPORT_SYMBOL(tegra3_query_touch_module_pcbid);
 unsigned int tegra3_query_audio_codec_pcbid(void)
 {
 	unsigned int codec_pcbid = 0;
-	const char *project = tegra3_get_project_name();
 	unsigned int ret = -1;
-
-	/* Check if running target platform is TF201 or TF202T*/
-	if ((!strncmp(project, "TF201", TEGRA3_PROJECT_NAME_MAX_LEN)) ||
-		(!strncmp(project, "TF202T", TEGRA3_PROJECT_NAME_MAX_LEN))) {
-		pr_err("[MISC]: %s is not supported on %s.\n", __func__, project);
-		return ret;
-	}
-
-	codec_pcbid = HW_DRF_VAL(TEGRA3_DEVKIT, MISC_HW, ACODEC, cardhu_pcbid);
-
-	if ((!strncmp(project, "TF200X", TEGRA3_PROJECT_NAME_MAX_LEN)) ||
-		(!strncmp(project, "TF200XG", TEGRA3_PROJECT_NAME_MAX_LEN))) {
-		ret = codec_pcbid;
-	}
 
 	return ret;
 }
@@ -144,14 +119,7 @@ EXPORT_SYMBOL(tegra3_query_audio_codec_pcbid);
 unsigned int tegra3_query_wifi_module_pcbid(void)
 {
 	unsigned int wifi_pcbid = 0;
-	const char *project = tegra3_get_project_name();
 	unsigned int ret = -1;
-
-	/* Check if running target platform is valid */
-	if (!strncmp(project, "unknown", TEGRA3_PROJECT_NAME_MAX_LEN)) {
-		pr_err("[MISC]: %s is not supported on %s.\n", __func__, project);
-		return ret;
-	}
 
 	wifi_pcbid = HW_DRF_VAL(TEGRA3_DEVKIT, MISC_HW, WIFI, cardhu_pcbid);
 	ret = wifi_pcbid;

@@ -286,14 +286,7 @@ static int __init cardhu_wifi_init(void)
 
 int __init cardhu_sdhci_init(void)
 {
-	struct board_info board_info;
-	tegra_get_board_info(&board_info);
-	if ((board_info.board_id == BOARD_PM269) ||
-		(board_info.board_id == BOARD_E1257) ||
-		(board_info.board_id == BOARD_PM305) ||
-		(board_info.board_id == BOARD_PM311)) {
-			tegra_sdhci_platform_data0.wp_gpio = PM269_SD_WP;
-	}
+	tegra_sdhci_platform_data0.wp_gpio = PM269_SD_WP;
 
 	switch (tegra3_query_wifi_module_pcbid()){
 
