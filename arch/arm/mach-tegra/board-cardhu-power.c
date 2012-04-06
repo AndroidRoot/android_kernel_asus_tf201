@@ -250,15 +250,6 @@ static struct tps6591x_rtc_platform_data rtc_data = {
 	TPS_REG(LDO_7, ldo7, 0),		\
 	TPS_REG(LDO_8, ldo8, 0)
 
-static struct tps6591x_subdev_info tps_devs_e118x_skubit0_0[] = {
-	TPS_REG(VIO, vio, 0),
-	TPS_REG(VDD_1, vdd1, skubit0_0),
-	TPS6591X_DEV_COMMON_E118X,
-#if defined(CONFIG_RTC_DRV_TPS6591x)
-	TPS_RTC_REG(),
-#endif
-};
-
 static struct tps6591x_subdev_info tps_devs_e118x_skubit0_1[] = {
 	TPS_REG(VIO, vio, 0),
 	TPS_REG(VDD_1, vdd1, skubit0_1),
@@ -280,23 +271,6 @@ static struct tps6591x_subdev_info tps_devs_e118x_skubit0_1[] = {
 	TPS_REG(LDO_7, ldo7, 0),		\
 	TPS_REG(LDO_8, ldo8, 0)
 
-static struct tps6591x_subdev_info tps_devs_e1198_skubit0_0[] = {
-	TPS_REG(VIO, vio, 0),
-	TPS_REG(VDD_1, vdd1, skubit0_0),
-	TPS6591X_DEV_COMMON_CARDHU,
-#if defined(CONFIG_RTC_DRV_TPS6591x)
-	TPS_RTC_REG(),
-#endif
-};
-
-static struct tps6591x_subdev_info tps_devs_e1198_skubit0_1[] = {
-	TPS_REG(VIO, vio, 0),
-	TPS_REG(VDD_1, vdd1, skubit0_1),
-	TPS6591X_DEV_COMMON_CARDHU,
-#if defined(CONFIG_RTC_DRV_TPS6591x)
-	TPS_RTC_REG(),
-#endif
-};
 
 #define TPS_GPIO_INIT_PDATA(gpio_nr, _init_apply, _sleep_en, _pulldn_en, _output_en, _output_val)	\
 	[gpio_nr] = {					\
@@ -375,8 +349,6 @@ static struct i2c_board_info __initdata tps6236x_boardinfo[] = {
 
 int __init cardhu_regulator_init(void)
 {
-	struct board_info board_info;
-	struct board_info pmu_board_info;
 	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
 	u32 pmc_ctrl;
 
@@ -386,80 +358,24 @@ int __init cardhu_regulator_init(void)
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-	pmu_board_info.sku=1;
 
-	if (pmu_board_info.board_id == BOARD_PMU_PM298)
-		return cardhu_pm298_regulator_init();
-	if (pmu_board_info.board_id == BOARD_PMU_PM299)
-		return cardhu_pm299_regulator_init();
+	pdata_ldo3_e118x.slew_rate_uV_per_us = 250;
 
-	/* The regulator details have complete constraints */
-	regulator_has_full_constraints();
+	tps_platform.num_subdevs = ARRAY_SIZE(tps_devs_e118x_skubit0_1);
+	tps_platform.subdevs = tps_devs_e118x_skubit0_1;
 
-	/* PMU-E1208, the ldo2 should be set to 1200mV */
-	if (pmu_board_info.board_id == BOARD_E1208) {
-		pdata_ldo2_0.regulator.constraints.min_uV = 1200000;
-		pdata_ldo2_0.regulator.constraints.max_uV = 1200000;
-	}
 
-	if ((board_info.board_id == BOARD_E1198) ||
-		(board_info.board_id == BOARD_E1291)) {
-		if (board_info.sku & SKU_DCDC_TPS62361_SUPPORT) {
-			tps_platform.num_subdevs =
-					ARRAY_SIZE(tps_devs_e1198_skubit0_1);
-			tps_platform.subdevs = tps_devs_e1198_skubit0_1;
-		} else {
-			tps_platform.num_subdevs =
-					ARRAY_SIZE(tps_devs_e1198_skubit0_0);
-			tps_platform.subdevs = tps_devs_e1198_skubit0_0;
-		}
-	} else {
-		if (board_info.board_id == BOARD_PM269)
-			pdata_ldo3_e118x.slew_rate_uV_per_us = 250;
-
-		if (pmu_board_info.sku & SKU_DCDC_TPS62361_SUPPORT) {
-			tps_platform.num_subdevs = ARRAY_SIZE(tps_devs_e118x_skubit0_1);
-			tps_platform.subdevs = tps_devs_e118x_skubit0_1;
-		} else {
-			tps_platform.num_subdevs = ARRAY_SIZE(tps_devs_e118x_skubit0_0);
-			tps_platform.subdevs = tps_devs_e118x_skubit0_0;
-		}
-	}
-
-	/* E1291-A04/A05: Enable DEV_SLP and enable sleep on GPIO2 */
-	if ((board_info.board_id == BOARD_E1291) &&
-			((board_info.fab == BOARD_FAB_A04) ||
-			 (board_info.fab == BOARD_FAB_A05))) {
-		tps_platform.dev_slp_en = true;
-		tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
-		tps_platform.num_gpioinit_data =
-					ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
-	}
-
-	/* For PM269-alike products: Enable DEV_SLP and enable sleep on GPIO2 */
-	if ((board_info.board_id == BOARD_PM269) &&
-		(!strcmp(tegra3_get_project_name(), "TF201") ||
-		!strcmp(tegra3_get_project_name(), "TF200X") ||
-		!strcmp(tegra3_get_project_name(), "TF200XG") ||
-		!strcmp(tegra3_get_project_name(), "TF202T") ||
-		!strcmp(tegra3_get_project_name(), "TF200"))) {
-		pr_info("TPS6591x GPIO2 was reprogrammed to follow state of SLEEP input\n");
-		tps_platform.dev_slp_en = true;
-		tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
-		tps_platform.num_gpioinit_data =
-					ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
-	}
+	pr_info("TPS6591x GPIO2 was reprogrammed to follow state of SLEEP input\n");
+	tps_platform.dev_slp_en = true;
+	tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
+	tps_platform.num_gpioinit_data =
+				ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
 
 	i2c_register_board_info(4, cardhu_regulators, 1);
 
-	/* Resgister the TPS6236x for all boards whose sku bit 0 is set. */
-	if ((board_info.sku & SKU_DCDC_TPS62361_SUPPORT) ||
-			(pmu_board_info.sku & SKU_DCDC_TPS62361_SUPPORT)) {
-		pr_info("Registering the device TPS62361B\n");
-		i2c_register_board_info(4, tps6236x_boardinfo, 1);
-	}
+	pr_info("Registering the device TPS62361B\n");
+	i2c_register_board_info(4, tps6236x_boardinfo, 1);
+
 	return 0;
 }
 
