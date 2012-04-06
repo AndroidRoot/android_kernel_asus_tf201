@@ -18,15 +18,11 @@
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
 
-#include <linux/gpio.h>
-
 #include "core.h"
 #include "bus.h"
 #include "mmc_ops.h"
 #include "sd.h"
 #include "sd_ops.h"
-
-#include "../debug_mmc.h"
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -928,7 +924,7 @@ static void mmc_sd_remove(struct mmc_host *host)
 /*
  * Card detection callback from host.
  */
-static int mmc_sd_detect(struct mmc_host *host)
+static void mmc_sd_detect(struct mmc_host *host)
 {
 	int err = 0;
 #ifdef CONFIG_MMC_PARANOID_SD_INIT
@@ -944,26 +940,18 @@ static int mmc_sd_detect(struct mmc_host *host)
 	 * Just check if our card has been removed.
 	 */
 #ifdef CONFIG_MMC_PARANOID_SD_INIT
-	if(gpio_get_value(SD_CARD_DETECT) == 1)
-	{
-		MMC_printk("%s: sd skip re-detect card", mmc_hostname(host));
-		err = 1;
+	while(retries) {
+		err = mmc_send_status(host->card, NULL);
+		if (err) {
+			retries--;
+			udelay(5);
+			continue;
+		}
+		break;
 	}
-	else
-	{
-		while(retries) {
-			err = mmc_send_status(host->card, NULL);
-			if (err) {
-				retries--;
-				udelay(5);
-				continue;
-			}
-			break;
-		}
-		if (!retries) {
-			printk(KERN_ERR "%s(%s): Unable to re-detect card (%d)\n",
-			       __func__, mmc_hostname(host), err);
-		}
+	if (!retries) {
+		printk(KERN_ERR "%s(%s): Unable to re-detect card (%d)\n",
+		       __func__, mmc_hostname(host), err);
 	}
 #else
 	err = mmc_send_status(host->card, NULL);
@@ -977,7 +965,6 @@ static int mmc_sd_detect(struct mmc_host *host)
 		mmc_detach_bus(host);
 		mmc_release_host(host);
 	}
-	return err;
 }
 
 /*

@@ -15,23 +15,6 @@
 
 #include <linux/mmc/core.h>
 #include <linux/mmc/pm.h>
-#define SD_CARD_DETECT 69
-
-struct tegra_sdhci_host {
-	bool	clk_enabled;
-	struct regulator *vdd_io_reg;
-	struct regulator *vdd_slot_reg;
-	/* Pointer to the chip specific HW ops */
-	struct tegra_sdhci_hw_ops *hw_ops;
-	/* Host controller instance */
-	unsigned int instance;
-	/* vddio_min */
-	unsigned int vddio_min_uv;
-	/* vddio_max */
-	unsigned int vddio_max_uv;
-	/* max clk supported by the platform */
-	unsigned int max_clk_limit;
-};
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -306,8 +289,6 @@ struct mmc_host {
 #endif
 
 	unsigned long		private[0] ____cacheline_aligned;
-
-	u32			opcode;
 };
 
 extern struct mmc_host *mmc_alloc_host(int extra, struct device *);
