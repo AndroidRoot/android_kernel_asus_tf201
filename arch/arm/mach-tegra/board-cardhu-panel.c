@@ -231,13 +231,7 @@ static int cardhu_backlight_notify(struct device *unused, int brightness)
 	if (brightness > 255) {
 		pr_info("Error: Brightness > 255!\n");
 	} else {
-		/* This value depends on the panel.
-		  Current 19X12 panel with PM313 gets
-		  full brightness when the output is 0. */
-		if (display_board_info.board_id == BOARD_DISPLAY_PM313)
-			brightness = 255 - bl_output[brightness];
-		else
-			brightness = bl_output[brightness];
+		brightness = bl_output[brightness];
 	}
 
 	return brightness;
@@ -287,23 +281,8 @@ static int cardhu_panel_enable(void)
 	}
 	msleep(20);
 
-	if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-		/* lvds configuration */
-		gpio_set_value(pm313_R_FDE, 1);
-		gpio_set_value(pm313_R_FB, 1);
-		gpio_set_value(pm313_MODE0, 1);
-		gpio_set_value(pm313_MODE1, 0);
-		gpio_set_value(pm313_BPP, PM313_LVDS_PANEL_BPP);
+	gpio_set_value(e1247_pm269_lvds_shutdown, 1);
 
-		/* FIXME : it may require more or less delay for latching
-		  values correctly before enabling RGB2LVDS */
-		mdelay(100);
-		gpio_set_value(pm313_lvds_shutdown, 1);
-	}
-	else
-	{
-		gpio_set_value(e1247_pm269_lvds_shutdown, 1);
-	}
 	msleep(210);
 
 	if (cardhu_lvds_vdd_bl == NULL) {
@@ -331,12 +310,9 @@ static int cardhu_panel_disable(void)
 	cardhu_lvds_vdd_bl = NULL;
 	msleep(250);
 
-	if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-		gpio_set_value(pm313_lvds_shutdown, 0);
-	}
-	else {
-		gpio_set_value(e1247_pm269_lvds_shutdown, 0);
-	}
+
+	gpio_set_value(e1247_pm269_lvds_shutdown, 0);
+
 	msleep(20);
 
 	regulator_disable(cardhu_lvds_vdd_panel);
@@ -491,21 +467,6 @@ static struct resource cardhu_disp2_resources[] = {
 #endif
 
 #ifndef CONFIG_TEGRA_CARDHU_DSI
-static struct tegra_dc_mode panel_19X12_modes[] = {
-	{
-		.pclk = 154000000,
-		.h_ref_to_sync = 11,
-		.v_ref_to_sync = 1,
-		.h_sync_width = 32,
-		.v_sync_width = 6,
-		.h_back_porch = 80,
-		.v_back_porch = 26,
-		.h_active = 1920,
-		.v_active = 1200,
-		.h_front_porch = 48,
-		.v_front_porch = 3,
-	},
-};
 
 static struct tegra_dc_mode cardhu_panel_modes[] = {
   {
@@ -522,23 +483,6 @@ static struct tegra_dc_mode cardhu_panel_modes[] = {
     .h_front_porch = 48,
     .v_front_porch = 3,
   },
-};
-
-static struct tegra_dc_mode cardhu_panel_modes_55hz[] = {
-	{
-		/* 1366x768p 55Hz */
-		.pclk = 68000000,
-		.h_ref_to_sync = 0,
-		.v_ref_to_sync = 12,
-		.h_sync_width = 30,
-		.v_sync_width = 5,
-		.h_back_porch = 52,
-		.v_back_porch = 20,
-		.h_active = 1366,
-		.v_active = 768,
-		.h_front_porch = 64,
-		.v_front_porch = 25,
-	},
 };
 #endif
 
@@ -1047,7 +991,6 @@ struct early_suspend cardhu_panel_early_suspender;
 
 static void cardhu_panel_early_suspend(struct early_suspend *h)
 {
-	unsigned i;
 
 	/* power down LCD, add use a black screen for HDMI */
 	if (num_registered_fb > 0)
@@ -1077,78 +1020,6 @@ int __init cardhu_panel_init(void)
 	cardhu_carveouts[1].base = tegra_carveout_start;
 	cardhu_carveouts[1].size = tegra_carveout_size;
 
-	if (board_info.board_id == BOARD_E1291 &&
-		((board_info.sku & SKU_TOUCHSCREEN_MECH_FIX) == 0)) {
-		/* use 55Hz panel timings to reduce noise on sensitive touch */
-		printk("Using cardhu_panel_modes_55hz\n");
-		cardhu_disp1_out.modes = cardhu_panel_modes_55hz;
-		cardhu_disp1_out.n_modes = ARRAY_SIZE(cardhu_panel_modes_55hz);
-	}
-
-#if defined(CONFIG_TEGRA_DC) && !defined(CONFIG_TEGRA_CARDHU_DSI)
-	if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-		/* initialize the values */
-#if defined(PM313_LVDS_PANEL_19X12)
-		cardhu_disp1_out.modes = panel_19X12_modes;
-		cardhu_disp1_out.n_modes = ARRAY_SIZE(panel_19X12_modes);
-		cardhu_disp1_out.parent_clk = "pll_d_out0";
-#if (PM313_LVDS_PANEL_BPP == 1)
-		cardhu_disp1_out.depth = 18;
-#else
-		cardhu_disp1_out.depth = 24;
-#endif
-		cardhu_fb_data.xres = 1920;
-		cardhu_fb_data.yres = 1200;
-
-		cardhu_disp2_out.parent_clk = "pll_d2_out0";
-		cardhu_hdmi_fb_data.xres = 1920;
-		cardhu_hdmi_fb_data.yres = 1200;
-#endif
-
-		/* lvds configuration */
-		err = gpio_request(pm313_R_FDE, "R_FDE");
-		err |= gpio_direction_output(pm313_R_FDE, 1);
-		tegra_gpio_enable(pm313_R_FDE);
-
-		err |= gpio_request(pm313_R_FB, "R_FB");
-		err |= gpio_direction_output(pm313_R_FB, 1);
-		tegra_gpio_enable(pm313_R_FB);
-
-		err |= gpio_request(pm313_MODE0, "MODE0");
-		err |= gpio_direction_output(pm313_MODE0, 1);
-		tegra_gpio_enable(pm313_MODE0);
-
-		err |= gpio_request(pm313_MODE1, "MODE1");
-		err |= gpio_direction_output(pm313_MODE1, 0);
-		tegra_gpio_enable(pm313_MODE1);
-
-		err |= gpio_request(pm313_BPP, "BPP");
-		err |= gpio_direction_output(pm313_BPP, PM313_LVDS_PANEL_BPP);
-		tegra_gpio_enable(pm313_BPP);
-
-		err = gpio_request(pm313_lvds_shutdown, "lvds_shutdown");
-		/* free ride provided by bootloader */
-		err |= gpio_direction_output(pm313_lvds_shutdown, 1);
-		tegra_gpio_enable(pm313_lvds_shutdown);
-
-		if (err)
-			printk(KERN_ERR "ERROR(s) in LVDS configuration\n");
-	}
-/*	else if ((display_board_info.board_id == BOARD_DISPLAY_E1247 &&
-				board_info.board_id == BOARD_PM269) ||
-				(board_info.board_id == BOARD_E1257) ||
-				(board_info.board_id == BOARD_PM305) ||
-				(board_info.board_id == BOARD_PM311)) {
-		gpio_request(e1247_pm269_lvds_shutdown, "lvds_shutdown");
-		gpio_direction_output(e1247_pm269_lvds_shutdown, 1);
-		tegra_gpio_enable(e1247_pm269_lvds_shutdown);
-	} else {
-		gpio_request(cardhu_lvds_shutdown, "lvds_shutdown");
-		gpio_direction_output(cardhu_lvds_shutdown, 1);
-		tegra_gpio_enable(cardhu_lvds_shutdown);
-	}
-*/
-#endif
 	tegra_gpio_enable(cardhu_hdmi_enb);
 	gpio_request(cardhu_hdmi_enb, "hdmi_5v_en");
 	gpio_direction_output(cardhu_hdmi_enb, 1);
