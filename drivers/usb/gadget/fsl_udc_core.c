@@ -76,7 +76,6 @@ static struct usb_dr_device *dr_regs;
 #ifndef CONFIG_ARCH_MXC
 static struct usb_sys_interface *usb_sys_regs;
 #endif
-extern int usb_function_enable;
 /* Charger current limit=1800mA, as per the USB charger spec */
 #define USB_CHARGING_CURRENT_LIMIT_MA 1800
 /* 1 sec wait time for charger detection after vbus is detected */
@@ -674,12 +673,10 @@ static void dr_controller_run(struct fsl_udc *udc)
 	temp |= USB_MODE_CTRL_MODE_DEVICE;
 	fsl_writel(temp, &dr_regs->usbmode);
 
-	if(usb_function_enable) {
-		/* Set controller to Run */
-		temp = fsl_readl(&dr_regs->usbcmd);
-		temp |= USB_CMD_RUN_STOP;
-		fsl_writel(temp, &dr_regs->usbcmd);
-	}
+	/* Set controller to Run */
+	temp = fsl_readl(&dr_regs->usbcmd);
+	temp |= USB_CMD_RUN_STOP;
+	fsl_writel(temp, &dr_regs->usbcmd);
 
 #ifdef CONFIG_ARCH_TEGRA
 	/* Wait for controller to start */
