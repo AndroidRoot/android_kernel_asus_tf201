@@ -65,7 +65,6 @@ enum {
 #include <linux/string.h>
 #include <linux/fs.h>
 #include <linux/workqueue.h>
-#include <linux/wakelock.h>
 
 struct partition {
 	unsigned char boot_ind;		/* 0x80 - active */
@@ -191,7 +190,6 @@ struct gendisk {
 	struct blk_integrity *integrity;
 #endif
 	int node_id;
-	struct wake_lock sd_wake_lock;
 };
 
 static inline struct gendisk *part_to_disk(struct hd_struct *part)
