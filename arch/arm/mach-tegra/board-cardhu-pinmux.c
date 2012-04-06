@@ -443,79 +443,6 @@ static __initdata struct tegra_pingroup_config cardhu_pinmux_e118x[] = {
 	DEFAULT_PINMUX(GMI_RST_N,       RSVD3,           PULL_UP,   TRISTATE,   INPUT),
 };
 
-static __initdata struct tegra_pingroup_config cardhu_pinmux_pm311[] = {
-	/* Power rails GPIO */
-	DEFAULT_PINMUX(SPI2_SCK,        SPI2,            NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(PEX_L2_RST_N,    PCIE,            PULL_UP,   TRISTATE,   INPUT),
-	DEFAULT_PINMUX(PEX_L2_CLKREQ_N, PCIE,            PULL_UP,   TRISTATE,   INPUT),
-};
-
-static __initdata struct tegra_pingroup_config cardhu_pinmux_cardhu[] = {
-	DEFAULT_PINMUX(LCD_CS0_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_SCK,         DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_CS1_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_M1,          DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-
-	DEFAULT_PINMUX(GMI_CS2_N,       RSVD1,           PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(GMI_AD8,         PWM0,            NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(GMI_AD10,        NAND,            NORMAL,    NORMAL,     OUTPUT),
-
-	/* Power rails GPIO */
-	DEFAULT_PINMUX(GMI_CS2_N,       NAND,            NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(GMI_RST_N,       RSVD3,           PULL_UP,   TRISTATE,   INPUT),
-	DEFAULT_PINMUX(GMI_AD15,        NAND,            PULL_UP,   TRISTATE,   INPUT),
-
-	DEFAULT_PINMUX(GMI_CS0_N,       GMI,             PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(GMI_CS1_N,       GMI,             PULL_UP,   TRISTATE,   INPUT),
-	/*TP_IRQ*/
-	DEFAULT_PINMUX(GMI_CS4_N,       GMI,             PULL_UP,   NORMAL,     INPUT),
-	/*PCIE dock detect*/
-	DEFAULT_PINMUX(GPIO_PU4,        PWM1,            PULL_UP,   NORMAL,     INPUT),
-};
-
-static __initdata struct tegra_pingroup_config cardhu_pinmux_cardhu_a03[] = {
-	DEFAULT_PINMUX(LCD_CS0_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_SCK,         DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_CS1_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_M1,          DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-
-	DEFAULT_PINMUX(GMI_CS2_N,       RSVD1,           PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(GMI_AD8,         PWM0,            NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(GMI_AD10,        NAND,            NORMAL,    NORMAL,     OUTPUT),
-
-	/* Power rails GPIO */
-	DEFAULT_PINMUX(PEX_L0_PRSNT_N,  PCIE,            NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(PEX_L0_CLKREQ_N, PCIE,            NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(PEX_L1_CLKREQ_N, RSVD3,           PULL_UP,   TRISTATE,   INPUT),
-	DEFAULT_PINMUX(PEX_L1_PRSNT_N,  RSVD3,           PULL_UP,   TRISTATE,   INPUT),
-};
-
-static __initdata struct tegra_pingroup_config cardhu_pinmux_e1291_a04[] = {
-	DEFAULT_PINMUX(GMI_AD15,        NAND,            PULL_DOWN,   NORMAL,   OUTPUT),
-	DEFAULT_PINMUX(ULPI_DATA5,      UARTA,           PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(ULPI_DATA6,      UARTA,           NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(SPI2_MOSI,       SPI6,            NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(DAP3_SCLK,       RSVD1,           NORMAL,    NORMAL,     OUTPUT),
-};
-
-static __initdata struct tegra_pingroup_config cardhu_pinmux_e1198[] = {
-	DEFAULT_PINMUX(LCD_CS0_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_SCK,         DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_CS1_N,       DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(LCD_M1,          DISPLAYA,        NORMAL,    NORMAL,     INPUT),
-
-	DEFAULT_PINMUX(GMI_CS2_N,       RSVD1,           PULL_UP,   NORMAL,     INPUT),
-	DEFAULT_PINMUX(GMI_AD8,         PWM0,            NORMAL,    NORMAL,     OUTPUT),
-	DEFAULT_PINMUX(GMI_AD10,        NAND,            NORMAL,    NORMAL,     OUTPUT),
-
-	/* SPI2 */
-	DEFAULT_PINMUX(SPI2_SCK,        SPI2,            PULL_UP,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(SPI2_MOSI,       SPI2,            PULL_UP,    TRISTATE,     INPUT),
-	DEFAULT_PINMUX(SPI2_MISO,       SPI2,            PULL_UP,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(SPI2_CS0_N,      SPI2,            PULL_UP,    NORMAL,     INPUT),
-	DEFAULT_PINMUX(SPI2_CS2_N,      SPI2,            PULL_UP,    TRISTATE,     INPUT),
-};
-
 static __initdata struct tegra_pingroup_config unused_pins_lowpower[] = {
 	DEFAULT_PINMUX(GMI_WAIT,        NAND,           PULL_UP,    TRISTATE,     OUTPUT),
 	DEFAULT_PINMUX(GMI_ADV_N,       NAND,           NORMAL,     TRISTATE,     OUTPUT),
@@ -577,66 +504,9 @@ static void __init cardhu_pinmux_audio_init(void)
 		.value		= _value,	\
 	}
 
-
-/* E1198-A01/E1291 specific  fab < A03 */
-static struct gpio_init_pin_info init_gpio_mode_e1291_a02[] = {
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PH7, false, 0),
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PI4, false, 0),
-};
-
-/* E1198-A02/E1291 specific  fab = A03 */
-static struct gpio_init_pin_info init_gpio_mode_e1291_a03[] = {
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PDD6, false, 0),
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PDD4, false, 0),
-};
-
-/* E1198-A02/E1291 specific  fab >= A04 */
-static struct gpio_init_pin_info init_gpio_mode_e1291_a04[] = {
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PDD6, false, 0),
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PDD4, false, 0),
-	GPIO_INIT_PIN_MODE(TEGRA_GPIO_PR2, false, 0),
-};
-
 static void __init cardhu_gpio_init_configure(void)
 {
-	struct board_info board_info;
-	int len;
-	int i;
-	struct gpio_init_pin_info *pins_info;
-
-	tegra_get_board_info(&board_info);
-
-	switch (board_info.board_id) {
-	case BOARD_E1198:
-		if (board_info.fab < BOARD_FAB_A02) {
-			len = ARRAY_SIZE(init_gpio_mode_e1291_a02);
-			pins_info = init_gpio_mode_e1291_a02;
-		} else {
-			len = ARRAY_SIZE(init_gpio_mode_e1291_a03);
-			pins_info = init_gpio_mode_e1291_a03;
-		}
-		break;
-	case BOARD_E1291:
-		if (board_info.fab < BOARD_FAB_A03) {
-			len = ARRAY_SIZE(init_gpio_mode_e1291_a02);
-			pins_info = init_gpio_mode_e1291_a02;
-		} else if (board_info.fab == BOARD_FAB_A03) {
-			len = ARRAY_SIZE(init_gpio_mode_e1291_a03);
-			pins_info = init_gpio_mode_e1291_a03;
-		} else {
-			len = ARRAY_SIZE(init_gpio_mode_e1291_a04);
-			pins_info = init_gpio_mode_e1291_a04;
-		}
-		break;
-	default:
 		return;
-	}
-
-	for (i = 0; i < len; ++i) {
-		tegra_gpio_init_configure(pins_info->gpio_nr,
-			pins_info->is_input, pins_info->value);
-		pins_info++;
-	}
 }
 
 int __init cardhu_pinmux_init(void)
@@ -650,52 +520,16 @@ int __init cardhu_pinmux_init(void)
 					ARRAY_SIZE(cardhu_drive_pinmux));
 
 	tegra_get_board_info(&board_info);
-	switch (board_info.board_id) {
-	case BOARD_E1198:
-		tegra_pinmux_config_table(cardhu_pinmux_e1198,
-					ARRAY_SIZE(cardhu_pinmux_e1198));
-		tegra_pinmux_config_table(unused_pins_lowpower,
-					ARRAY_SIZE(unused_pins_lowpower));
-		if (board_info.fab >= BOARD_FAB_A02)
-			tegra_pinmux_config_table(cardhu_pinmux_cardhu_a03,
-					ARRAY_SIZE(cardhu_pinmux_cardhu_a03));
-		break;
-	case BOARD_E1291:
-		if (board_info.fab < BOARD_FAB_A03) {
-			tegra_pinmux_config_table(cardhu_pinmux_cardhu,
-					ARRAY_SIZE(cardhu_pinmux_cardhu));
-			tegra_pinmux_config_table(unused_pins_lowpower,
-					ARRAY_SIZE(unused_pins_lowpower));
-		} else {
-			tegra_pinmux_config_table(cardhu_pinmux_cardhu_a03,
-					ARRAY_SIZE(cardhu_pinmux_cardhu_a03));
-		}
-		if (board_info.fab >= BOARD_FAB_A04)
-			tegra_pinmux_config_table(cardhu_pinmux_e1291_a04,
-					ARRAY_SIZE(cardhu_pinmux_e1291_a04));
-		break;
 
-	case BOARD_PM269:
-	case BOARD_PM305:
-	case BOARD_PM311:
-	case BOARD_E1257:
-		if (board_info.board_id == BOARD_PM311 || board_info.board_id == BOARD_PM305) {
-			tegra_pinmux_config_table(cardhu_pinmux_pm311,
-					ARRAY_SIZE(cardhu_pinmux_pm311));
-		} else {
-			tegra_pinmux_config_table(cardhu_pinmux_e118x,
-					ARRAY_SIZE(cardhu_pinmux_e118x));
-		}
-		tegra_pinmux_config_table(unused_pins_lowpower,
-					ARRAY_SIZE(unused_pins_lowpower));
-		tegra_pinmux_config_table(gmi_pins_269,
-					ARRAY_SIZE(gmi_pins_269));
-		break;
-	default:
-		tegra_pinmux_config_table(cardhu_pinmux_e118x,
-					ARRAY_SIZE(cardhu_pinmux_e118x));
-		break;
-	}
+
+	tegra_pinmux_config_table(cardhu_pinmux_e118x,
+				ARRAY_SIZE(cardhu_pinmux_e118x));
+
+	tegra_pinmux_config_table(unused_pins_lowpower,
+				ARRAY_SIZE(unused_pins_lowpower));
+
+	tegra_pinmux_config_table(gmi_pins_269,
+				ARRAY_SIZE(gmi_pins_269));
 
 	cardhu_pinmux_audio_init();
 
@@ -782,34 +616,12 @@ static void set_unused_pin_gpio(struct gpio_init_pin_info *lpm_pin_info,
  * recomendation */
 int __init cardhu_pins_state_init(void)
 {
-	struct board_info board_info;
-	struct board_info display_board_info;
 
-	tegra_get_board_info(&board_info);
-	tegra_get_display_board_info(&display_board_info);
-	if ((board_info.board_id == BOARD_E1291) ||
-		(board_info.board_id == BOARD_E1198)) {
-			set_unused_pin_gpio(&pin_lpm_cardhu_common[0],
-					ARRAY_SIZE(pin_lpm_cardhu_common));
+	set_unused_pin_gpio(&vddio_gmi_pins_pm269[0],
+			ARRAY_SIZE(vddio_gmi_pins_pm269));
 
-			if (display_board_info.board_id != BOARD_DISPLAY_PM313) {
-				set_unused_pin_gpio(&pin_lpm_cardhu_common_wo_pm313[0],
-						ARRAY_SIZE(pin_lpm_cardhu_common_wo_pm313));
-			}
-	}
-
-	if ((board_info.board_id == BOARD_PM269) ||
-		(board_info.board_id == BOARD_E1257) ||
-		(board_info.board_id == BOARD_PM305) ||
-		(board_info.board_id == BOARD_PM311)) {
-			set_unused_pin_gpio(&vddio_gmi_pins_pm269[0],
-				ARRAY_SIZE(vddio_gmi_pins_pm269));
-
-			if (display_board_info.board_id != BOARD_DISPLAY_PM313) {
-				set_unused_pin_gpio(&vddio_gmi_pins_pm269_wo_pm313[0],
-						ARRAY_SIZE(vddio_gmi_pins_pm269_wo_pm313));
-			}
-	}
+	set_unused_pin_gpio(&vddio_gmi_pins_pm269_wo_pm313[0],
+			ARRAY_SIZE(vddio_gmi_pins_pm269_wo_pm313));
 
 	return 0;
 }
