@@ -916,80 +916,13 @@ static struct platform_device gswitch_regulator_pdata = {
 int __init cardhu_gpio_switch_regulator_init(void)
 {
 	int i;
-	struct board_info board_info;
-	struct board_info pmu_board_info;
-	struct board_info display_board_info;
 
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-	tegra_get_display_board_info(&display_board_info);
+	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
+	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
 
-	if (pmu_board_info.board_id == BOARD_PMU_PM298)
-		return cardhu_pm298_gpio_switch_regulator_init();
+	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
+	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
 
-	if (pmu_board_info.board_id == BOARD_PMU_PM299)
-		return cardhu_pm299_gpio_switch_regulator_init();
-
-	switch (board_info.board_id) {
-	case BOARD_E1198:
-		if (board_info.fab <= BOARD_FAB_A01) {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e1198_base);
-			gswitch_pdata.subdevs = gswitch_subdevs_e1198_base;
-		} else {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e1198_a02);
-			gswitch_pdata.subdevs = gswitch_subdevs_e1198_a02;
-		}
-		break;
-
-	case BOARD_E1291:
-		if (board_info.fab == BOARD_FAB_A03) {
-			gswitch_pdata.num_subdevs =
-					ARRAY_SIZE(gswitch_subdevs_e1291_a03);
-			gswitch_pdata.subdevs = gswitch_subdevs_e1291_a03;
-		} else if ((board_info.fab == BOARD_FAB_A04) ||
-				(board_info.fab == BOARD_FAB_A05)) {
-			gswitch_pdata.num_subdevs =
-					ARRAY_SIZE(gswitch_subdevs_e1291_a04);
-			gswitch_pdata.subdevs = gswitch_subdevs_e1291_a04;
-		} else {
-			gswitch_pdata.num_subdevs =
-					ARRAY_SIZE(gswitch_subdevs_e1198_base);
-			gswitch_pdata.subdevs = gswitch_subdevs_e1198_base;
-		}
-		break;
-
-	case BOARD_PM311:
-	case BOARD_PM305:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm311);
-		gswitch_pdata.subdevs = gswitch_subdevs_pm311;
-		if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm311_pm313);
-			gswitch_pdata.subdevs = gswitch_subdevs_pm311_pm313;
-		}
-		break;
-
-	case BOARD_PM269:
-	case BOARD_E1257:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-		gswitch_pdata.subdevs = gswitch_subdevs_pm269;
-		if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269_pm313);
-			gswitch_pdata.subdevs = gswitch_subdevs_pm269_pm313;
-		} else {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-			gswitch_pdata.subdevs = gswitch_subdevs_pm269;
-		}
-		break;
-	default:
-		if (display_board_info.board_id == BOARD_DISPLAY_PM313) {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e118x_pm313);
-			gswitch_pdata.subdevs = gswitch_subdevs_e118x_pm313;
-		} else {
-			gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e118x);
-			gswitch_pdata.subdevs = gswitch_subdevs_e118x;
-		}
-		break;
-	}
 
 	for (i = 0; i < gswitch_pdata.num_subdevs; ++i) {
 		struct gpio_switch_regulator_subdev_data *gswitch_data = gswitch_pdata.subdevs[i];
@@ -1027,44 +960,7 @@ static struct tegra_suspend_platform_data cardhu_suspend_data = {
 
 int __init cardhu_suspend_init(void)
 {
-	struct board_info board_info;
-	struct board_info pmu_board_info;
-
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-
-	/* For PMU Fab A03, A04 and A05 make core_pwr_req to high */
-	if ((pmu_board_info.fab == BOARD_FAB_A03) ||
-		(pmu_board_info.fab == BOARD_FAB_A04) ||
-		 (pmu_board_info.fab == BOARD_FAB_A05))
-		cardhu_suspend_data.corereq_high = true;
-
-	/* CORE_PWR_REQ to be high for all processor/pmu board whose sku bit 0
-	 * is set. This is require to enable the dc-dc converter tps62361x */
-	if ((board_info.sku & SKU_DCDC_TPS62361_SUPPORT) || (pmu_board_info.sku & SKU_DCDC_TPS62361_SUPPORT))
-		cardhu_suspend_data.corereq_high = true;
-
-	switch (board_info.board_id) {
-	case BOARD_E1291:
-		/* CORE_PWR_REQ to be high for E1291-A03 */
-		if (board_info.fab == BOARD_FAB_A03)
-			cardhu_suspend_data.corereq_high = true;
-		break;
-	case BOARD_E1198:
-	case BOARD_PM269:
-	case BOARD_PM305:
-	case BOARD_PM311:
-		break;
-	case BOARD_E1187:
-	case BOARD_E1186:
-	case BOARD_E1256:
-	case BOARD_E1257:
-		cardhu_suspend_data.cpu_timer = 5000;
-		cardhu_suspend_data.cpu_off_timer = 5000;
-		break;
-	default:
-		break;
-	}
+	cardhu_suspend_data.corereq_high = true;
 
 	tegra_init_suspend(&cardhu_suspend_data);
 	return 0;
@@ -1097,11 +993,6 @@ int __init cardhu_power_off_init(void)
 	struct board_info pmu_board_info;
 
 	tegra_get_pmu_board_info(&pmu_board_info);
-
-	if (pmu_board_info.board_id == BOARD_PMU_PM298)
-		pm_power_off = cardhu_pm298_power_off;
-	else
-		pm_power_off = cardhu_power_off;
 
 	return 0;
 }
