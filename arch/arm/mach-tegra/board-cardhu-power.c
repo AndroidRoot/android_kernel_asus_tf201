@@ -1022,18 +1022,9 @@ int __init cardhu_edp_init(void)
 	   
 #ifdef CONFIG_ASUS_EDP_POLICY
 
-	const char *project = tegra3_get_project_name();
-
 	pr_info("%s : use asus edp policy\n", __func__);
 
-	if(!strcmp(project, "TF201"))
-	{
-		tegra_init_cpu_edp_limits(5000);
-	}
-	else if(!strcmp(project, "TF200X") || !strcmp(project, "TF200XG") || !strcmp(project, "TF200"))
-	{
-		tegra_init_cpu_edp_limits(6000);
-	}
+	tegra_init_cpu_edp_limits(5000);
 #else
 
 	unsigned int regulator_mA;
