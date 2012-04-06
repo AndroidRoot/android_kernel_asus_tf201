@@ -272,20 +272,6 @@ struct tegra_wired_jack_conf audio_wr_jack_conf = {
 };
 #endif
 
-static struct wm8903_platform_data cardhu_wm8903_pdata = {
-	.irq_active_low = 0,
-	.micdet_cfg = 0,
-	.micdet_delay = 100,
-	.gpio_base = CARDHU_GPIO_WM8903(0),
-	.gpio_cfg = {
-		(WM8903_GPn_FN_DMIC_LR_CLK_OUTPUT << WM8903_GP1_FN_SHIFT),
-		(WM8903_GPn_FN_DMIC_LR_CLK_OUTPUT << WM8903_GP2_FN_SHIFT) |
-			WM8903_GP2_DIR,
-		0,
-		WM8903_GPIO_NO_CONFIG,
-		WM8903_GPIO_NO_CONFIG,
-	},
-};
 #ifdef CONFIG_DSP_FM34
 static const struct i2c_board_info cardhu_dsp_board_info[] = {
 	{
@@ -348,85 +334,6 @@ static struct uart_clk_parent uart_parent_clk[] = {
 };
 
 static struct tegra_uart_platform_data cardhu_uart_pdata;
-
-static void __init uart_debug_init(void)
-{
-	struct board_info board_info;
-	int debug_port_id;
-
-	tegra_get_board_info(&board_info);
-
-	debug_port_id = get_tegra_uart_debug_port_id();
-	if (debug_port_id < 0) {
-		debug_port_id = 0;
-			/* UARTB is debug port
-			 *       for SLT - E1186/E1187/PM269
-			 *       for E1256/E1257
-			 */
-		if (((board_info.sku & SKU_SLT_ULPI_SUPPORT) &&
-			((board_info.board_id == BOARD_E1186) ||
-			(board_info.board_id == BOARD_E1187) ||
-			(board_info.board_id == BOARD_PM269))) ||
-			(board_info.board_id == BOARD_E1256) ||
-			(board_info.board_id == BOARD_E1257))
-				debug_port_id = 1;
-	}
-	switch (debug_port_id) {
-	case 0:
-		/* UARTA is the debug port. */
-		pr_info("Selecting UARTA as the debug console\n");
-		cardhu_uart_devices[0] = &debug_uarta_device;
-		debug_uart_clk = clk_get_sys("serial8250.0", "uarta");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uarta_device.dev.platform_data))->mapbase;
-		break;
-
-	case 1:
-		/* UARTB is the debug port. */
-		pr_info("Selecting UARTB as the debug console\n");
-		cardhu_uart_devices[1] = &debug_uartb_device;
-		debug_uart_clk =  clk_get_sys("serial8250.0", "uartb");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uartb_device.dev.platform_data))->mapbase;
-		break;
-
-	case 2:
-		/* UARTC is the debug port. */
-		pr_info("Selecting UARTC as the debug console\n");
-		cardhu_uart_devices[2] = &debug_uartc_device;
-		debug_uart_clk =  clk_get_sys("serial8250.0", "uartc");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uartc_device.dev.platform_data))->mapbase;
-		break;
-
-	case 3:
-		/* UARTD is the debug port. */
-		pr_info("Selecting UARTD as the debug console\n");
-		cardhu_uart_devices[3] = &debug_uartd_device;
-		debug_uart_clk =  clk_get_sys("serial8250.0", "uartd");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uartd_device.dev.platform_data))->mapbase;
-		break;
-
-	case 4:
-		/* UARTE is the debug port. */
-		pr_info("Selecting UARTE as the debug console\n");
-		cardhu_uart_devices[4] = &debug_uarte_device;
-		debug_uart_clk =  clk_get_sys("serial8250.0", "uarte");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uarte_device.dev.platform_data))->mapbase;
-		break;
-
-	default:
-		pr_info("The debug console id %d is invalid, Assuming UARTA", debug_port_id);
-		cardhu_uart_devices[0] = &debug_uarta_device;
-		debug_uart_clk = clk_get_sys("serial8250.0", "uarta");
-		debug_uart_port_base = ((struct plat_serial8250_port *)(
-			debug_uarta_device.dev.platform_data))->mapbase;
-		break;
-	}
-	return;
-}
 
 static void __init cardhu_uart_init(void)
 {
@@ -740,19 +647,10 @@ struct elan_ktf3k_i2c_platform_data ts_elan_ktf3k_data[] = {
                 .intr_gpio = TEGRA_GPIO_PH4,
         },
 };
-static struct i2c_board_info elan_i2c_devices[] = {
-        {
-                I2C_BOARD_INFO(ELAN_KTF3K_NAME, 0x10),
-                .platform_data = &ts_elan_ktf3k_data,
-                .irq = (INT_GPIO_BASE + TEGRA_GPIO_PH4),
-        },
-
-};
 #endif
 
 static int __init cardhu_touch_init(void)
 {
-	struct board_info BoardInfo;
 
 	tegra_gpio_enable(TEGRA_GPIO_PH4);
 	tegra_gpio_enable(TEGRA_GPIO_PH6);
@@ -766,18 +664,9 @@ static int __init cardhu_touch_init(void)
 	gpio_set_value(TEGRA_GPIO_PH6, 1);
 	msleep(100);
 
-	tegra_get_board_info(&BoardInfo);
 #if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT)
-	if ((BoardInfo.sku & SKU_TOUCH_MASK) == SKU_TOUCH_2000) {
 		atmel_mxt_info.config = config_sku2000;
 		atmel_mxt_info.config_crc = MXT_CONFIG_CRC_SKU2000;
-	}
-#endif
-#if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
-       if(strcmp(tegra3_get_project_name(), "TF200X") == 0 ||
-	    strcmp(tegra3_get_project_name(), "TF200XG") == 0 || 
-	    strcmp(tegra3_get_project_name(), "TF202T") == 0)  	
-           i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
 #endif
 	i2c_register_board_info(TOUCH_BUS_ATMEL_T9, atmel_i2c_info, 1);
 	return 0;
