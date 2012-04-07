@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-tegra/include/mach/board-cardhu-misc.h
+ * arch/arm/mach-tegra/include/mach/board-tf201-misc.h
  *
  * Copyright (C) 2011-2012 ASUSTek Computer Incorporation
  * Author: Paris Yeh <paris_yeh@asus.com>
@@ -15,7 +15,7 @@
  *
  */
 
-/* The cardhu_pcbid is hexadecimal representation as follows.
+/* The tf201_pcbid is hexadecimal representation as follows.
  *
  *	PCB_ID[1:0] is KB_ROW[5:4], and
  *	PCB_ID[2] is KB_COL[4], and
@@ -37,7 +37,7 @@
  *	1	  1	    1		TF200
  *	=======================================
  *
- * The cardhu_projectid format should be like as follows
+ * The tf201_projectid format should be like as follows
  *
  *	PROJECT[:INFO]*
  *
@@ -132,7 +132,7 @@ extern "C"
 #define TEGRA3_DEVKIT_MISC_HW_0_MP_DEFAULT	0x0UL //Engineering
 #define TEGRA3_DEVKIT_MISC_HW_0_MP_1		0x1UL //Mass Production
 
-extern unsigned char cardhu_chipid[17];
+extern unsigned char tf201_chipid[17];
 
 enum tegra3_project {
 	TEGRA3_PROJECT_TF201 = 0,
@@ -146,7 +146,7 @@ enum tegra3_project {
 	TEGRA3_PROJECT_MAX,
 };
 
-int __init cardhu_misc_init(void);
+int __init tf201_misc_init(void);
 
 /* Acquire project identification
  *   @ret cont char *

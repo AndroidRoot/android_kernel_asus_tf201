@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-tegra/board-cardhu-powermon.c
+ * arch/arm/mach-tegra/board-tf201-powermon.c
  *
  * Copyright (c) 2011, NVIDIA, All Rights Reserved.
  *
@@ -22,7 +22,7 @@
 #include <linux/ina219.h>
 
 #include "board.h"
-#include "board-cardhu.h"
+#include "board-tf201.h"
 
 enum {
 	VDD_AC_BAT,
@@ -137,7 +137,7 @@ enum {
 	INA_I2C_ADDR_4F,
 };
 
-static struct i2c_board_info cardhu_i2c0_ina219_board_info[] = {
+static struct i2c_board_info tf201_i2c0_ina219_board_info[] = {
 	[INA_I2C_ADDR_40] = {
 		I2C_BOARD_INFO("ina219", 0x40),
 		.platform_data = &power_mon_info[VDD_AC_BAT],
@@ -235,22 +235,24 @@ static struct i2c_board_info cardhu_i2c0_ina219_board_info[] = {
 	},
 };
 
-int __init cardhu_pmon_init(void)
+int __init tf201_pmon_init(void)
 {
+	#if 0
 	struct board_info bi;
 
 	tegra_get_board_info(&bi);
 
 	/* for fab A04 VDD_CORE_IN changed from ina with addr 0x44 to 0x4A */
 	if (bi.fab == BOARD_FAB_A04) {
-		cardhu_i2c0_ina219_board_info[INA_I2C_ADDR_44].platform_data =
+		tf201_i2c0_ina219_board_info[INA_I2C_ADDR_44].platform_data =
 			&power_mon_info[UNUSED_RAIL];
-		cardhu_i2c0_ina219_board_info[INA_I2C_ADDR_4A].platform_data =
+		tf201_i2c0_ina219_board_info[INA_I2C_ADDR_4A].platform_data =
 			&power_mon_info[VDD_CORE_IN];
 	}
 
-	i2c_register_board_info(0, cardhu_i2c0_ina219_board_info,
-		ARRAY_SIZE(cardhu_i2c0_ina219_board_info));
+	i2c_register_board_info(0, tf201_i2c0_ina219_board_info,
+		ARRAY_SIZE(tf201_i2c0_ina219_board_info));
+	#endif
 	return 0;
 }
 

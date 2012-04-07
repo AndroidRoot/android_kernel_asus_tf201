@@ -16,7 +16,8 @@
 
 #include <linux/gpio.h>
 #include <../gpio-names.h>
-#include <mach/board-cardhu-misc.h>
+// ARG. DON'T f*cking include board-specific files in generic drivers!
+#include <mach/board-tf201-misc.h>
 
 #define AL3010_DRV_NAME	"al3010"
 #define DRIVER_VERSION		"1.0"
