@@ -358,18 +358,16 @@ int __init tf201_regulator_init(void)
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
-
 	pdata_ldo3_e118x.slew_rate_uV_per_us = 250;
 
 	tps_platform.num_subdevs = ARRAY_SIZE(tps_devs_e118x_skubit0_1);
 	tps_platform.subdevs = tps_devs_e118x_skubit0_1;
 
-
 	pr_info("TPS6591x GPIO2 was reprogrammed to follow state of SLEEP input\n");
 	tps_platform.dev_slp_en = true;
 	tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
 	tps_platform.num_gpioinit_data =
-				ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
+		ARRAY_SIZE(tps_gpio_pdata_e1291_a04);
 
 	i2c_register_board_info(4, tf201_regulators, 1);
 
@@ -920,10 +918,6 @@ int __init tf201_gpio_switch_regulator_init(void)
 	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
 	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
 
-	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
-
-
 	for (i = 0; i < gswitch_pdata.num_subdevs; ++i) {
 		struct gpio_switch_regulator_subdev_data *gswitch_data = gswitch_pdata.subdevs[i];
 		if (gswitch_data->gpio_nr < TEGRA_NR_GPIOS)
@@ -977,23 +971,9 @@ static void tf201_power_off(void)
 	while (1);
 }
 
-static void tf201_pm298_power_off(void)
-{
-	int ret;
-	pr_err("tf201-pm298: Powering off the device\n");
-	ret = max77663_power_off();
-	if (ret)
-		pr_err("tf201-pm298: failed to power off\n");
-
-	while (1);
-}
-
 int __init tf201_power_off_init(void)
 {
-	struct board_info pmu_board_info;
-
-	tegra_get_pmu_board_info(&pmu_board_info);
-
+	pm_power_off = tf201_power_off;
 	return 0;
 }
 
