@@ -40,7 +40,9 @@
 #include <linux/version.h>
 #include <linux/gpio.h>
 #include <../arch/arm/mach-tegra/gpio-names.h>
-#include <mach/board-cardhu-misc.h>
+// TODO: remove dependency on board-specific file
+// tegra3_query_touch_module_pcbid
+#include <mach/board-tf201-misc.h>
 #include <linux/wakelock.h>
 #include <linux/switch.h>
 

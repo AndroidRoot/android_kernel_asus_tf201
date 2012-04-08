@@ -155,8 +155,20 @@ obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sdhci.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sensors.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-memory.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-powermon.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-misc.o
-obj-${CONFIG_MACH_CARDHU}               += vibrator.o
+
+obj-${CONFIG_MACH_TF201}               += board-tf201.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-kbc.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-panel.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pinmux.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-power.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pm298-power-rails.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pm299-power-rails.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-sdhci.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-sensors.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-memory.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-powermon.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-misc.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-vibrator.o
 
 obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise.o
 obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-panel.o

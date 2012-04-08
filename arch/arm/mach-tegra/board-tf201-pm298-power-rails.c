@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-tegra/board-cardhu-pm298-power-rails.c
+ * arch/arm/mach-tegra/board-tf201-pm298-power-rails.c
  *
  * Copyright (C) 2011 NVIDIA, Inc.
  *
@@ -35,7 +35,7 @@
 
 #include "gpio-names.h"
 #include "board.h"
-#include "board-cardhu.h"
+#include "board-tf201.h"
 #include "pm.h"
 #include "wakeups-t3.h"
 #include "mach/tsensor.h"
@@ -342,10 +342,8 @@ static struct i2c_board_info __initdata max77663_regulators[] = {
 	},
 };
 
-int __init cardhu_pm298_regulator_init(void)
+int __init tf201_pm298_regulator_init(void)
 {
-	struct board_info board_info;
-	struct board_info pmu_board_info;
 	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
 	u32 pmc_ctrl;
 
@@ -353,14 +351,6 @@ int __init cardhu_pm298_regulator_init(void)
 	 * interrupts when low */
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
-
-	/* The regulator details have complete constraints */
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-	if (pmu_board_info.board_id != BOARD_PMU_PM298) {
-		pr_err("%s(): Board ID is not proper\n", __func__);
-		return -ENODEV;
-	}
 
 	i2c_register_board_info(4, max77663_regulators,
 				ARRAY_SIZE(max77663_regulators));
@@ -705,12 +695,6 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 	ADD_GPIO_REG(en_vddio_vid_oc_e118x),	\
 	ADD_GPIO_REG(en_vbrtr),
 
-/* Gpio switch regulator platform data  for E1186/E1187/E1256*/
-static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_e118x[] = {
-	COMMON_GPIO_REG
-	E118x_GPIO_REG
-};
-
 /* Gpio switch regulator platform data for PM269*/
 static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_pm269[] = {
 	PM269_GPIO_REG
@@ -725,26 +709,12 @@ static struct platform_device gswitch_regulator_pdata = {
 	},
 };
 
-int __init cardhu_pm298_gpio_switch_regulator_init(void)
+int __init tf201_pm298_gpio_switch_regulator_init(void)
 {
 	int i;
-	struct board_info board_info;
-	tegra_get_board_info(&board_info);
 
-	switch (board_info.board_id) {
-	case BOARD_PM269:
-	case BOARD_PM305:
-	case BOARD_PM311:
-	case BOARD_E1257:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-		gswitch_pdata.subdevs = gswitch_subdevs_pm269;
-		break;
-
-	default:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e118x);
-		gswitch_pdata.subdevs = gswitch_subdevs_e118x;
-		break;
-	}
+	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
+	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
 
 	for (i = 0; i < gswitch_pdata.num_subdevs; ++i) {
 		struct gpio_switch_regulator_subdev_data *gswitch_data =

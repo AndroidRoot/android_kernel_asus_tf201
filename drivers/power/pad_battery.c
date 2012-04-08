@@ -36,7 +36,7 @@
 #include <linux/timer.h>
 #include "../../arch/arm/mach-tegra/gpio-names.h"
 #include "../../arch/arm/mach-tegra/wakeups-t3.h"
-#include <mach/board-cardhu-misc.h>
+#include <mach/board-tf201-misc.h>
 #define SMBUS_RETRY                                     (3)
 #define BAT_IN_DET                                        TEGRA_GPIO_PN4
 #define GPIOPIN_BATTERY_DETECT	         BAT_IN_DET

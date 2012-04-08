@@ -31,7 +31,7 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include "dsp.h"
-#include <mach/board-cardhu-misc.h>
+#include <mach/board-tf201-misc.h>
 
 #undef DUMP_REG
 

@@ -28,30 +28,32 @@
 #include <mach/irqs.h>
 #include <mach/iomap.h>
 #include <mach/sdhci.h>
+#include <mach/board-tf201-misc.h>
 
 #include "gpio-names.h"
 #include "board.h"
-#include "board-cardhu.h"
+#include "board-tf201.h"
 
-#define CARDHU_WLAN_PWR	TEGRA_GPIO_PD4
-#define CARDHU_WLAN_RST	TEGRA_GPIO_PD3
-#define CARDHU_WLAN_WOW	TEGRA_GPIO_PO4
-#define CARDHU_SD_CD TEGRA_GPIO_PI5
-#define CARDHU_SD_WP TEGRA_GPIO_PT3
+#define TF201_WLAN_PWR	TEGRA_GPIO_PD4
+#define TF201_WLAN_RST	TEGRA_GPIO_PD3
+#define TF201_WLAN_WOW	TEGRA_GPIO_PO4
+#define TF201_SDIO_WOW	TEGRA_GPIO_PB6
+#define TF201_SD_CD TEGRA_GPIO_PI5
+#define TF201_SD_WP TEGRA_GPIO_PT3
 #define PM269_SD_WP -1
 
 static void (*wifi_status_cb)(int card_present, void *dev_id);
 static void *wifi_status_cb_devid;
-static int cardhu_wifi_status_register(void (*callback)(int , void *), void *);
+static int tf201_wifi_status_register(void (*callback)(int , void *), void *);
 
-static int cardhu_wifi_reset(int on);
-static int cardhu_wifi_power(int on);
-static int cardhu_wifi_set_carddetect(int val);
+static int tf201_wifi_reset(int on);
+static int tf201_wifi_power(int on);
+static int tf201_wifi_set_carddetect(int val);
 
-static struct wifi_platform_data cardhu_wifi_control = {
-	.set_power	= cardhu_wifi_power,
-	.set_reset	= cardhu_wifi_reset,
-	.set_carddetect	= cardhu_wifi_set_carddetect,
+static struct wifi_platform_data tf201_wifi_control = {
+	.set_power	= tf201_wifi_power,
+	.set_reset	= tf201_wifi_reset,
+	.set_carddetect	= tf201_wifi_set_carddetect,
 };
 
 static struct resource wifi_resource[] = {
@@ -63,13 +65,13 @@ static struct resource wifi_resource[] = {
 	},
 };
 
-static struct platform_device cardhu_wifi_device = {
+static struct platform_device tf201_wifi_device = {
 	.name		= "bcm4329_wlan",
 	.id		= 1,
 	.num_resources	= 1,
 	.resource	= wifi_resource,
 	.dev		= {
-		.platform_data = &cardhu_wifi_control,
+		.platform_data = &tf201_wifi_control,
 	},
 };
 
@@ -129,10 +131,11 @@ static struct embedded_sdio_data embedded_sdio_data2 = {
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data2 = {
 	.mmc_data = {
-		.register_status_notify	= cardhu_wifi_status_register,
+		.register_status_notify	= tf201_wifi_status_register,
 		.embedded_sdio = &embedded_sdio_data2,
-		.built_in = 1,
+		.built_in = -1,
 	},
+	.wow_gpio = TF201_SDIO_WOW,
 	.cd_gpio = -1,
 	.wp_gpio = -1,
 	.power_gpio = -1,
@@ -147,8 +150,9 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data2 = {
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data0 = {
-	.cd_gpio = CARDHU_SD_CD,
-	.wp_gpio = CARDHU_SD_WP,
+	.wow_gpio = -1,
+	.cd_gpio = TF201_SD_CD,
+	.wp_gpio = TF201_SD_WP,
 	.power_gpio = -1,
 /*	.tap_delay = 6,
 	.is_voltage_switch_supported = true,
@@ -161,6 +165,7 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data0 = {
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
+	.wow_gpio = -1,
 	.cd_gpio = -1,
 	.wp_gpio = -1,
 	.power_gpio = -1,
@@ -209,7 +214,7 @@ static struct platform_device tegra_sdhci_device3 = {
 	},
 };
 
-static int cardhu_wifi_status_register(
+static int tf201_wifi_status_register(
 		void (*callback)(int card_present, void *dev_id),
 		void *dev_id)
 {
@@ -220,7 +225,7 @@ static int cardhu_wifi_status_register(
 	return 0;
 }
 
-static int cardhu_wifi_set_carddetect(int val)
+static int tf201_wifi_set_carddetect(int val)
 {
 	pr_debug("%s: %d\n", __func__, val);
 	if (wifi_status_cb)
@@ -230,71 +235,76 @@ static int cardhu_wifi_set_carddetect(int val)
 	return 0;
 }
 
-static int cardhu_wifi_power(int on)
+static int tf201_wifi_power(int on)
 {
 	pr_debug("%s: %d\n", __func__, on);
-	gpio_set_value(CARDHU_WLAN_PWR, on);
+	gpio_set_value(TF201_WLAN_PWR, on);
 	mdelay(100);
-	gpio_set_value(CARDHU_WLAN_RST, on);
+	gpio_set_value(TF201_WLAN_RST, on);
 	mdelay(200);
 
 	return 0;
 }
 
-static int cardhu_wifi_reset(int on)
+static int tf201_wifi_reset(int on)
 {
 	pr_debug("%s: do nothing\n", __func__);
 	return 0;
 }
 
-static int __init cardhu_wifi_init(void)
+static int __init tf201_wifi_init(void)
 {
 	int rc;
 
-	rc = gpio_request(CARDHU_WLAN_PWR, "wlan_power");
+	rc = gpio_request(TF201_WLAN_PWR, "wlan_power");
 	if (rc)
 		pr_err("WLAN_PWR gpio request failed:%d\n", rc);
-	rc = gpio_request(CARDHU_WLAN_RST, "wlan_rst");
+	rc = gpio_request(TF201_WLAN_RST, "wlan_rst");
 	if (rc)
 		pr_err("WLAN_RST gpio request failed:%d\n", rc);
-	rc = gpio_request(CARDHU_WLAN_WOW, "bcmsdh_sdmmc");
+	rc = gpio_request(TF201_WLAN_WOW, "bcmsdh_sdmmc");
 	if (rc)
 		pr_err("WLAN_WOW gpio request failed:%d\n", rc);
 
-	tegra_gpio_enable(CARDHU_WLAN_PWR);
-	tegra_gpio_enable(CARDHU_WLAN_RST);
-	tegra_gpio_enable(CARDHU_WLAN_WOW);
+	tegra_gpio_enable(TF201_WLAN_PWR);
+	tegra_gpio_enable(TF201_WLAN_RST);
+	tegra_gpio_enable(TF201_WLAN_WOW);
 
-	rc = gpio_direction_output(CARDHU_WLAN_PWR, 0);
+	rc = gpio_direction_output(TF201_WLAN_PWR, 0);
 	if (rc)
 		pr_err("WLAN_PWR gpio direction configuration failed:%d\n", rc);
-	gpio_direction_output(CARDHU_WLAN_RST, 0);
+	gpio_direction_output(TF201_WLAN_RST, 0);
 	if (rc)
 		pr_err("WLAN_RST gpio direction configuration failed:%d\n", rc);
-	rc = gpio_direction_input(CARDHU_WLAN_WOW);
+	rc = gpio_direction_input(TF201_WLAN_WOW);
 	if (rc)
 		pr_err("WLAN_WOW gpio direction configuration failed:%d\n", rc);
 
-	platform_device_register(&cardhu_wifi_device);
+	platform_device_register(&tf201_wifi_device);
 	return 0;
 }
 
-int __init cardhu_sdhci_init(void)
+int __init tf201_sdhci_init(void)
 {
-	struct board_info board_info;
-	tegra_get_board_info(&board_info);
-	if ((board_info.board_id == BOARD_PM269) ||
-		(board_info.board_id == BOARD_E1257) ||
-		(board_info.board_id == BOARD_PM305) ||
-		(board_info.board_id == BOARD_PM311)) {
-			tegra_sdhci_platform_data0.wp_gpio = PM269_SD_WP;
-			tegra_sdhci_platform_data2.max_clk_limit = 12000000;
+	tegra_sdhci_platform_data0.wp_gpio = PM269_SD_WP;
+
+	switch (tegra3_query_wifi_module_pcbid()){
+
+	case 0:
+	case 2:
+		tegra_sdhci_platform_data2.mmc_data.built_in = 1;
+		break;
+	case 1:
+	case 3:
+	default:
+		tegra_sdhci_platform_data2.mmc_data.built_in = 0;
+		break;
 	}
 
 	platform_device_register(&tegra_sdhci_device3);
 	platform_device_register(&tegra_sdhci_device2);
 	platform_device_register(&tegra_sdhci_device0);
 
-	cardhu_wifi_init();
+	tf201_wifi_init();
 	return 0;
 }

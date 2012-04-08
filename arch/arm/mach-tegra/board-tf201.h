@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-tegra/board-cardhu.h
+ * arch/arm/mach-tegra/board-tf201.h
  *
  * Copyright (c) 2011, NVIDIA Corporation.
  *
@@ -18,8 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef _MACH_TEGRA_BOARD_CARDHU_H
-#define _MACH_TEGRA_BOARD_CARDHU_H
+#ifndef _MACH_TEGRA_BOARD_TF201_H
+#define _MACH_TEGRA_BOARD_TF201_H
 
 #include <mach/gpio.h>
 #include <mach/irqs.h>
@@ -60,11 +60,11 @@
 #define SKU_MEMORY_1GB_1R_HYNIX		0x0
 #define SKU_MEMORY_2GB_2R_HYH9		0x2
 /* If other BOARD_ variants */
-#define SKU_MEMORY_CARDHU_1GB_1R	0x0
-#define SKU_MEMORY_CARDHU_2GB_2R	0x2
-#define SKU_MEMORY_CARDHU_2GB_1R_HYK0	0x4
-#define SKU_MEMORY_CARDHU_2GB_1R_HYH9	0x6
-#define SKU_MEMORY_CARDHU_2GB_1R_HYNIX	0x1
+#define SKU_MEMORY_TF201_1GB_1R	0x0
+#define SKU_MEMORY_TF201_2GB_2R	0x2
+#define SKU_MEMORY_TF201_2GB_1R_HYK0	0x4
+#define SKU_MEMORY_TF201_2GB_1R_HYH9	0x6
+#define SKU_MEMORY_TF201_2GB_1R_HYNIX	0x1
 #define MEMORY_TYPE(sku) (((sku) >> SKU_MEMORY_TYPE_BIT) & SKU_MEMORY_TYPE_MASK)
 
 /* Board Fab version */
@@ -147,15 +147,15 @@
 #define CAM_TCA6416_GPIO_END		CAM_TCA6416_GPIO_BASE + 16
 
 /* WM8903 GPIOs */
-#define CARDHU_GPIO_WM8903(_x_)		(CAM_TCA6416_GPIO_END + (_x_))
-#define CARDHU_GPIO_WM8903_END		CARDHU_GPIO_WM8903(4)
+#define TF201_GPIO_WM8903(_x_)		(CAM_TCA6416_GPIO_END + (_x_))
+#define TF201_GPIO_WM8903_END		TF201_GPIO_WM8903(4)
 
 /* Audio-related GPIOs */
 #define TEGRA_GPIO_CDC_IRQ		TEGRA_GPIO_PW3
-#define TEGRA_GPIO_SPKR_EN		CARDHU_GPIO_WM8903(2)
+#define TEGRA_GPIO_SPKR_EN		TF201_GPIO_WM8903(2)
 #define TEGRA_GPIO_HP_DET		TEGRA_GPIO_PW2
 
-/* CAMERA RELATED GPIOs on CARDHU */
+/* CAMERA RELATED GPIOs on TF201 */
 #define OV5650_RESETN_GPIO			TEGRA_GPIO_PBB0
 #define CAM1_POWER_DWN_GPIO			TEGRA_GPIO_PBB5
 #define CAM2_POWER_DWN_GPIO			TEGRA_GPIO_PBB6
@@ -170,6 +170,9 @@
 #define CAMERA_FLASH_SYNC_GPIO		TEGRA_GPIO_PBB3
 #define CAMERA_FLASH_MAX_TORCH_AMP	7
 #define CAMERA_FLASH_MAX_FLASH_AMP	7
+/* CAMERA RELATED GPIOs on TF201*/
+#define ISP_POWER_1V2_EN_GPIO       TEGRA_GPIO_PS3      //ISP_1V2_EN VDD_ISP_1V2
+#define ISP_POWER_RESET_GPIO        TEGRA_GPIO_PBB0     //CAM_RST_5M, RSTX
 
 /* PCA954x I2C bus expander bus addresses */
 #define PCA954x_I2C_BUS_BASE	6
@@ -195,27 +198,30 @@
 #define MAX77663_IRQ_BASE	TEGRA_NR_IRQS
 #define MAX77663_IRQ_END	(MAX77663_IRQ_BASE + MAX77663_IRQ_NR)
 
-int cardhu_charge_init(void);
-int cardhu_regulator_init(void);
-int cardhu_suspend_init(void);
-int cardhu_sdhci_init(void);
-int cardhu_pinmux_init(void);
-int cardhu_panel_init(void);
-int cardhu_sensors_init(void);
-int cardhu_kbc_init(void);
-int cardhu_scroll_init(void);
-int cardhu_keys_init(void);
-int cardhu_gpio_switch_regulator_init(void);
-int cardhu_pins_state_init(void);
-int cardhu_emc_init(void);
-int cardhu_power_off_init(void);
-int cardhu_edp_init(void);
-int cardhu_pmon_init(void);
-int cardhu_pm298_gpio_switch_regulator_init(void);
-int cardhu_pm298_regulator_init(void);
-int cardhu_pm299_gpio_switch_regulator_init(void);
-int cardhu_pm299_regulator_init(void);
-void __init cardhu_tsensor_init(void);
+int tf201_charge_init(void);
+int tf201_regulator_init(void);
+int tf201_suspend_init(void);
+int tf201_sdhci_init(void);
+int tf201_pinmux_init(void);
+int tf201_panel_init(void);
+int tf201_sensors_init(void);
+int tf201_kbc_init(void);
+int tf201_scroll_init(void);
+int tf201_keys_init(void);
+int tf201_gpio_switch_regulator_init(void);
+int tf201_pins_state_init(void);
+int tf201_emc_init(void);
+int tf201_power_off_init(void);
+int tf201_edp_init(void);
+int tf201_pmon_init(void);
+int tf201_pm298_gpio_switch_regulator_init(void);
+int tf201_pm298_regulator_init(void);
+int tf201_pm299_gpio_switch_regulator_init(void);
+int tf201_pm299_regulator_init(void);
+void __init tf201_tsensor_init(void);
+#define TOUCH_GPIO_IRQ_ATMEL_T9	TEGRA_GPIO_PH4
+#define TOUCH_GPIO_RST_ATMEL_T9	TEGRA_GPIO_PH6
+#define TOUCH_BUS_ATMEL_T9	1
 
 /* Invensense MPU Definitions */
 #define MPU_GYRO_NAME		"mpu3050"
@@ -224,15 +230,15 @@ void __init cardhu_tsensor_init(void);
 #define MPU_GYRO_BUS_NUM	2
 #define MPU_GYRO_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
 #define MPU_ACCEL_NAME		"kxtf9"
-#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PL1
+#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PO5
 #define MPU_ACCEL_ADDR		0x0F
 #define MPU_ACCEL_BUS_NUM	2
-#define MPU_ACCEL_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
-#define MPU_COMPASS_NAME	"ak8975"
-#define MPU_COMPASS_IRQ_GPIO	0
-#define MPU_COMPASS_ADDR	0x0C
+#define MPU_ACCEL_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define MPU_COMPASS_NAME	"ami306"
+#define MPU_COMPASS_IRQ_GPIO	TEGRA_GPIO_PW0
+#define MPU_COMPASS_ADDR	0x0E
 #define MPU_COMPASS_BUS_NUM	2
-#define MPU_COMPASS_ORIENTATION	{ 1, 0, 0, 0, 1, 0, 0, 0, 1 }
+#define MPU_COMPASS_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
 
 /* Baseband GPIO addresses */
 #define BB_GPIO_BB_EN			TEGRA_GPIO_PR5

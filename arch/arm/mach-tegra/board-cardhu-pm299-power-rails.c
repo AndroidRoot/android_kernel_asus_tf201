@@ -315,6 +315,8 @@ static struct i2c_board_info __initdata tps6236x_boardinfo[] = {
 
 int __init cardhu_pm299_regulator_init(void)
 {
+	struct board_info board_info;
+	struct board_info pmu_board_info;
 	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
 	u32 pmc_ctrl;
 
@@ -323,21 +325,35 @@ int __init cardhu_pm299_regulator_init(void)
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
+	/* The regulator details have complete constraints */
+	tegra_get_board_info(&board_info);
+	tegra_get_pmu_board_info(&pmu_board_info);
+	if (pmu_board_info.board_id != BOARD_PMU_PM299) {
+		pr_err("%s(): Board ID is not proper\n", __func__);
+		return -ENODEV;
+	}
+
 	/* If TPS6236x DCDC is there then consumer for dc1 should
 	 * not have vdd_core */
-	pdata_dc1_skubit0_0.regulator.consumer_supplies =
-				ricoh583_dc1_supply_skubit0_1;
-	pdata_dc1_skubit0_0.regulator.num_consumer_supplies =
-			ARRAY_SIZE(ricoh583_dc1_supply_skubit0_1);
+	if ((board_info.sku & SKU_DCDC_TPS62361_SUPPORT) ||
+			(pmu_board_info.sku & SKU_DCDC_TPS62361_SUPPORT)) {
+		pdata_dc1_skubit0_0.regulator.consumer_supplies =
+					ricoh583_dc1_supply_skubit0_1;
+		pdata_dc1_skubit0_0.regulator.num_consumer_supplies =
+				ARRAY_SIZE(ricoh583_dc1_supply_skubit0_1);
+	}
 
 	ricoh_platform.num_subdevs = ARRAY_SIZE(ricoh_devs_e118x_dcdc);
 	ricoh_platform.subdevs = ricoh_devs_e118x_dcdc;
 
 	i2c_register_board_info(4, ricoh583_regulators, 1);
 
-	pr_info("Registering the device TPS62361B\n");
-	i2c_register_board_info(4, tps6236x_boardinfo, 1);
-
+	/* Register the TPS6236x for all boards whose sku bit 0 is set. */
+	if ((board_info.sku & SKU_DCDC_TPS62361_SUPPORT) ||
+			(pmu_board_info.sku & SKU_DCDC_TPS62361_SUPPORT)) {
+		pr_info("Registering the device TPS62361B\n");
+		i2c_register_board_info(4, tps6236x_boardinfo, 1);
+	}
 	return 0;
 }
 
@@ -680,6 +696,11 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 	ADD_GPIO_REG(en_vddio_vid_oc_e118x),	\
 	ADD_GPIO_REG(en_vbrtr),
 
+/* Gpio switch regulator platform data  for E1186/E1187/E1256*/
+static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_e118x[] = {
+	COMMON_GPIO_REG
+	E118x_GPIO_REG
+};
 
 /* Gpio switch regulator platform data for PM269*/
 static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_pm269[] = {
@@ -701,8 +722,20 @@ int __init cardhu_pm299_gpio_switch_regulator_init(void)
 	struct board_info board_info;
 	tegra_get_board_info(&board_info);
 
-	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
+	switch (board_info.board_id) {
+	case BOARD_PM269:
+	case BOARD_PM305:
+	case BOARD_PM311:
+	case BOARD_E1257:
+		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
+		gswitch_pdata.subdevs = gswitch_subdevs_pm269;
+		break;
+
+	default:
+		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e118x);
+		gswitch_pdata.subdevs = gswitch_subdevs_e118x;
+		break;
+	}
 
 	for (i = 0; i < gswitch_pdata.num_subdevs; ++i) {
 		struct gpio_switch_regulator_subdev_data *gswitch_data =

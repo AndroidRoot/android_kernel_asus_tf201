@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-tegra/board-cardhu-pm298-power-rails.c
+ * arch/arm/mach-tegra/board-tf201-pm299-power-rails.c
  *
  * Copyright (C) 2011 NVIDIA, Inc.
  *
@@ -22,11 +22,12 @@
 #include <linux/platform_device.h>
 #include <linux/resource.h>
 #include <linux/regulator/machine.h>
+#include <linux/mfd/ricoh583.h>
 #include <linux/gpio.h>
 #include <linux/io.h>
 #include <linux/regulator/gpio-switch-regulator.h>
-#include <linux/mfd/max77663-core.h>
-#include <linux/regulator/max77663-regulator.h>
+#include <linux/regulator/ricoh583-regulator.h>
+#include <linux/regulator/tps6236x-regulator.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -35,29 +36,45 @@
 
 #include "gpio-names.h"
 #include "board.h"
-#include "board-cardhu.h"
-#include "pm.h"
+#include "board-tf201.h"
 #include "wakeups-t3.h"
 #include "mach/tsensor.h"
 
 #define PMC_CTRL		0x0
-#define PMC_CTRL_INTR_LOW	BIT(17)
+#define PMC_CTRL_INTR_LOW	(1 << 17)
 
-static struct regulator_consumer_supply max77663_sd0_supply[] = {
+static struct regulator_consumer_supply ricoh583_dc1_supply_skubit0_0[] = {
+	REGULATOR_SUPPLY("vdd_core", NULL),
+	REGULATOR_SUPPLY("en_vddio_ddr_1v2", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_dc1_supply_skubit0_1[] = {
+	REGULATOR_SUPPLY("en_vddio_ddr_1v2", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_dc3_supply_0[] = {
+	REGULATOR_SUPPLY("vdd_gen1v5", NULL),
+	REGULATOR_SUPPLY("vcore_lcd", NULL),
+	REGULATOR_SUPPLY("track_ldo1", NULL),
+	REGULATOR_SUPPLY("external_ldo_1v2", NULL),
+	REGULATOR_SUPPLY("vcore_cam1", NULL),
+	REGULATOR_SUPPLY("vcore_cam2", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_dc0_supply_0[] = {
 	REGULATOR_SUPPLY("vdd_cpu_pmu", NULL),
 	REGULATOR_SUPPLY("vdd_cpu", NULL),
 	REGULATOR_SUPPLY("vdd_sys", NULL),
 };
 
-static struct regulator_consumer_supply max77663_sd1_supply[] = {
-	REGULATOR_SUPPLY("vdd_core", NULL),
-	REGULATOR_SUPPLY("en_vddio_ddr_1v2", NULL),
-};
-
-static struct regulator_consumer_supply max77663_sd2_supply[] = {
+static struct regulator_consumer_supply ricoh583_dc2_supply_0[] = {
+	REGULATOR_SUPPLY("vdd_gen1v8", NULL),
 	REGULATOR_SUPPLY("avdd_hdmi_pll", NULL),
 	REGULATOR_SUPPLY("avdd_usb_pll", NULL),
 	REGULATOR_SUPPLY("avdd_osc", NULL),
+	REGULATOR_SUPPLY("vddio_sys", NULL),
+	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
+	REGULATOR_SUPPLY("pwrdet_sdmmc4", NULL),
 	REGULATOR_SUPPLY("vdd1v8_satelite", NULL),
 	REGULATOR_SUPPLY("vddio_uart", NULL),
 	REGULATOR_SUPPLY("pwrdet_uart", NULL),
@@ -82,30 +99,45 @@ static struct regulator_consumer_supply max77663_sd2_supply[] = {
 	REGULATOR_SUPPLY("vcom_1v8", NULL),
 	REGULATOR_SUPPLY("pmuio_1v8", NULL),
 	REGULATOR_SUPPLY("avdd_ic_usb", NULL),
-	REGULATOR_SUPPLY("vdd_gen1v8", NULL),
 };
 
-static struct regulator_consumer_supply max77663_sd3_supply[] = {
-	REGULATOR_SUPPLY("vdd_gen1v5", NULL),
-	REGULATOR_SUPPLY("vcore_lcd", NULL),
-	REGULATOR_SUPPLY("track_ldo1", NULL),
-	REGULATOR_SUPPLY("external_ldo_1v2", NULL),
-	REGULATOR_SUPPLY("vcore_cam1", NULL),
-	REGULATOR_SUPPLY("vcore_cam2", NULL),
+static struct regulator_consumer_supply ricoh583_ldo0_supply_0[] = {
+	REGULATOR_SUPPLY("unused_ldo0", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_ldo1_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_pexb", NULL),
 	REGULATOR_SUPPLY("vdd_pexb", NULL),
 	REGULATOR_SUPPLY("avdd_pex_pll", NULL),
 	REGULATOR_SUPPLY("avdd_pexa", NULL),
 	REGULATOR_SUPPLY("vdd_pexa", NULL),
-	REGULATOR_SUPPLY("vcom_1v2", NULL),
-	REGULATOR_SUPPLY("vdio_hsic", NULL),
 };
 
-static struct regulator_consumer_supply max77663_ldo0_supply[] = {
-	REGULATOR_SUPPLY("vdd_ddr_hs", NULL),
+static struct regulator_consumer_supply ricoh583_ldo2_supply_0[] = {
+	REGULATOR_SUPPLY("avdd_sata", NULL),
+	REGULATOR_SUPPLY("vdd_sata", NULL),
+	REGULATOR_SUPPLY("avdd_sata_pll", NULL),
+	REGULATOR_SUPPLY("avdd_plle", NULL),
 };
 
-static struct regulator_consumer_supply max77663_ldo1_supply[] = {
+static struct regulator_consumer_supply ricoh583_ldo3_supply_0[] = {
+	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.0"),
+	REGULATOR_SUPPLY("pwrdet_sdmmc1", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_ldo4_supply_0[] = {
+	REGULATOR_SUPPLY("vdd_rtc", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_ldo5_supply_0[] = {
+	REGULATOR_SUPPLY("avdd_vdac", NULL),
+};
+
+static struct regulator_consumer_supply ricoh583_ldo6_supply_0[] = {
+	REGULATOR_SUPPLY("avdd_dsi_csi", NULL),
+	REGULATOR_SUPPLY("pwrdet_mipi", NULL),
+};
+static struct regulator_consumer_supply ricoh583_ldo7_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_plla_p_c_s", NULL),
 	REGULATOR_SUPPLY("avdd_pllm", NULL),
 	REGULATOR_SUPPLY("avdd_pllu_d", NULL),
@@ -113,65 +145,19 @@ static struct regulator_consumer_supply max77663_ldo1_supply[] = {
 	REGULATOR_SUPPLY("avdd_pllx", NULL),
 };
 
-static struct regulator_consumer_supply max77663_ldo2_supply[] = {
-	REGULATOR_SUPPLY("avdd_dsi_csi", NULL),
-	REGULATOR_SUPPLY("pwrdet_mipi", NULL),
+static struct regulator_consumer_supply ricoh583_ldo8_supply_0[] = {
+	REGULATOR_SUPPLY("vdd_ddr_hs", NULL),
 };
 
-static struct regulator_consumer_supply max77663_ldo3_supply[] = {
-	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
-	REGULATOR_SUPPLY("pwrdet_sdmmc4", NULL),
-};
-
-static struct regulator_consumer_supply max77663_ldo4_supply[] = {
-	REGULATOR_SUPPLY("vdd_rtc", NULL),
-};
-
-static struct regulator_consumer_supply max77663_ldo5_supply[] = {
-	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.0"),
-	REGULATOR_SUPPLY("pwrdet_sdmmc1", NULL),
-};
-
-static struct regulator_consumer_supply max77663_ldo6_supply[] = {
-	REGULATOR_SUPPLY("vddio_sys", NULL),
-};
-
-static struct regulator_consumer_supply max77663_ldo7_supply[] = {
-	REGULATOR_SUPPLY("unused_ldo7", NULL),
-};
-
-static struct regulator_consumer_supply max77663_ldo8_supply[] = {
-	REGULATOR_SUPPLY("vcore_mmc", NULL),
-};
-
-static struct max77663_regulator_fps_cfg max77663_fps_cfgs[] = {
-	{
-		.src = FPS_SRC_0,
-		.en_src = FPS_EN_SRC_EN0,
-		.time_period = FPS_TIME_PERIOD_DEF,
-	},
-	{
-		.src = FPS_SRC_1,
-		.en_src = FPS_EN_SRC_EN1,
-		.time_period = FPS_TIME_PERIOD_DEF,
-	},
-	{
-		.src = FPS_SRC_2,
-		.en_src = FPS_EN_SRC_EN0,
-		.time_period = FPS_TIME_PERIOD_DEF,
-	},
-};
-
-#define MAX77663_PDATA_INIT(_id, _min_uV, _max_uV, _supply_reg,		\
-			    _always_on, _boot_on, _apply_uV,		\
-			    _init_apply, _init_enable, _init_uV,	\
-			    _fps_src, _fps_pu_period, _fps_pd_period, _flags) \
-	static struct max77663_regulator_platform_data max77663_regulator_pdata_##_id = \
+#define RICOH_PDATA_INIT(_name, _sname, _minmv, _maxmv, _supply_reg, _always_on, \
+	_boot_on, _apply_uv, _init_uV, _init_enable, _init_apply, _flags,      \
+	_ext_contol, _ds_slots) \
+	static struct ricoh583_regulator_platform_data pdata_##_name##_##_sname = \
 	{								\
-		.init_data = {						\
+		.regulator = {						\
 			.constraints = {				\
-				.min_uV = _min_uV,			\
-				.max_uV = _max_uV,			\
+				.min_uV = (_minmv)*1000,		\
+				.max_uV = (_maxmv)*1000,		\
 				.valid_modes_mask = (REGULATOR_MODE_NORMAL |  \
 						     REGULATOR_MODE_STANDBY), \
 				.valid_ops_mask = (REGULATOR_CHANGE_MODE |    \
@@ -179,173 +165,156 @@ static struct max77663_regulator_fps_cfg max77663_fps_cfgs[] = {
 						   REGULATOR_CHANGE_VOLTAGE), \
 				.always_on = _always_on,		\
 				.boot_on = _boot_on,			\
-				.apply_uV = _apply_uV,			\
+				.apply_uV = _apply_uv,			\
 			},						\
 			.num_consumer_supplies =			\
-				ARRAY_SIZE(max77663_##_id##_supply),	\
-			.consumer_supplies = max77663_##_id##_supply,	\
+				ARRAY_SIZE(ricoh583_##_name##_supply_##_sname),	\
+			.consumer_supplies = ricoh583_##_name##_supply_##_sname, \
 			.supply_regulator = _supply_reg,		\
 		},							\
-		.init_apply = _init_apply,				\
+		.init_uV =  _init_uV * 1000,				\
 		.init_enable = _init_enable,				\
-		.init_uV = _init_uV,					\
-		.fps_src = _fps_src,					\
-		.fps_pu_period = _fps_pu_period,			\
-		.fps_pd_period = _fps_pd_period,			\
-		.fps_cfgs = max77663_fps_cfgs,				\
+		.init_apply = _init_apply,				\
+		.deepsleep_slots = _ds_slots,				\
 		.flags = _flags,					\
+		.ext_pwr_req = _ext_contol,				\
 	}
 
-MAX77663_PDATA_INIT(sd0,  600000, 3387500, NULL, 1, 0, 0,
-		    0, 0, -1, FPS_SRC_NONE, -1, -1, EN2_CTRL_SD0 | SD_FSRADE_DISABLE);
+RICOH_PDATA_INIT(dc0, 0,         700,  1500, 0, 1, 1, 0, -1, 0, 0, 0,
+				RICOH583_EXT_PWRREQ2_CONTROL, 0);
+RICOH_PDATA_INIT(dc1, skubit0_0, 700,  1500, 0, 1, 1, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(dc2, 0,         900,  2400, 0, 1, 1, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(dc3, 0,         900,  2400, 0, 1, 1, 0, -1, 0, 0, 0, 0, 0);
 
-MAX77663_PDATA_INIT(sd1,  800000, 1587500, NULL, 1, 0, 0,
-		    1, 1, -1, FPS_SRC_1, -1, -1, SD_FSRADE_DISABLE);
+RICOH_PDATA_INIT(ldo0, 0,         1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo1, 0,         1000, 3300, ricoh583_rails(DC1), 0, 0, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo2, 0,         1050, 1050, ricoh583_rails(DC1), 0, 0, 1, -1, 0, 0, 0, 0, 0);
 
-MAX77663_PDATA_INIT(sd2,  600000, 3387500, NULL, 1, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
+RICOH_PDATA_INIT(ldo3, 0,         1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo4, 0,         750,  1500, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo5, 0,         1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0);
 
-MAX77663_PDATA_INIT(sd3,  600000, 3387500, NULL, 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
+RICOH_PDATA_INIT(ldo6, 0,         1200, 1200, ricoh583_rails(DC2), 0, 0, 1, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo7, 0,         1200, 1200, ricoh583_rails(DC2), 1, 1, 1, -1, 0, 0, 0, 0, 0);
+RICOH_PDATA_INIT(ldo8, 0,         900, 3400, ricoh583_rails(DC2), 1, 0, 0, -1, 0, 0, 0, 0, 0);
 
-MAX77663_PDATA_INIT(ldo0, 800000, 2350000, max77663_rails(sd2), 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo1, 800000, 2350000, max77663_rails(sd2), 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo2, 800000, 3950000, max77663_rails(sd2), 0, 0, 0,
-		    0, 0, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo3, 800000, 3950000, NULL, 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo4, 800000, 1587500, NULL, 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo5, 800000, 3950000, NULL, 0, 0, 0,
-		    0, 0, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo6, 800000, 3950000, NULL, 1, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo7, 800000, 3950000, NULL, 0, 0, 0,
-		    0, 0, -1, FPS_SRC_NONE, -1, -1, 0);
-
-MAX77663_PDATA_INIT(ldo8, 800000, 3950000, NULL, 0, 0, 0,
-		    1, 1, -1, FPS_SRC_NONE, -1, -1, 0);
-
-#define MAX77663_REG(_id, _data)					\
-	{								\
-		.name = "max77663-regulator",				\
-		.id = MAX77663_REGULATOR_ID_##_id,			\
-		.mfd_data = &max77663_regulator_pdata_##_data,		\
-	}
-
-#define MAX77663_RTC()							\
-	{								\
-		.name = "max77663-rtc",					\
-		.id = 0,						\
-	}
-
-static struct mfd_cell max77663_subdevs[] = {
-	MAX77663_REG(SD0, sd0),
-	MAX77663_REG(SD1, sd1),
-	MAX77663_REG(SD2, sd2),
-	MAX77663_REG(SD3, sd3),
-	MAX77663_REG(LDO0, ldo0),
-	MAX77663_REG(LDO1, ldo1),
-	MAX77663_REG(LDO2, ldo2),
-	MAX77663_REG(LDO3, ldo3),
-	MAX77663_REG(LDO4, ldo4),
-	MAX77663_REG(LDO5, ldo5),
-	MAX77663_REG(LDO6, ldo6),
-	MAX77663_REG(LDO7, ldo7),
-	MAX77663_REG(LDO8, ldo8),
-	MAX77663_RTC(),
-};
-
-struct max77663_gpio_config max77663_gpio_cfgs[] = {
-	{
-		.gpio = MAX77663_GPIO0,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_LOW,
-		.out_drv = GPIO_OUT_DRV_PUSH_PULL,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO1,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_HIGH,
-		.out_drv = GPIO_OUT_DRV_OPEN_DRAIN,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO2,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_HIGH,
-		.out_drv = GPIO_OUT_DRV_OPEN_DRAIN,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO3,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_HIGH,
-		.out_drv = GPIO_OUT_DRV_OPEN_DRAIN,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO4,
-		.out_drv = GPIO_OUT_DRV_PUSH_PULL,
-		.alternate = GPIO_ALT_ENABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO5,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_LOW,
-		.out_drv = GPIO_OUT_DRV_PUSH_PULL,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO6,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_LOW,
-		.out_drv = GPIO_OUT_DRV_PUSH_PULL,
-		.alternate = GPIO_ALT_DISABLE,
-	},
-	{
-		.gpio = MAX77663_GPIO7,
-		.dir = GPIO_DIR_OUT,
-		.dout = GPIO_DOUT_LOW,
-		.out_drv = GPIO_OUT_DRV_PUSH_PULL,
-		.alternate = GPIO_ALT_DISABLE,
+static struct ricoh583_rtc_platform_data rtc_data = {
+	.irq = TEGRA_NR_IRQS + RICOH583_IRQ_YALE,
+	.time = {
+		.tm_year = 2011,
+		.tm_mon = 0,
+		.tm_mday = 1,
+		.tm_hour = 0,
+		.tm_min = 0,
+		.tm_sec = 0,
 	},
 };
 
-static struct max77663_platform_data max7763_pdata = {
-	.irq_base	= MAX77663_IRQ_BASE,
-	.gpio_base	= MAX77663_GPIO_BASE,
+#define RICOH_RTC_REG()				\
+{						\
+	.id	= 0,				\
+	.name	= "rtc_ricoh583",		\
+	.platform_data = &rtc_data,		\
+}
 
-	.num_gpio_cfgs = ARRAY_SIZE(max77663_gpio_cfgs),
-	.gpio_cfgs = max77663_gpio_cfgs,
+#define RICOH_REG(_id, _name, _sname)			\
+{							\
+	.id	= RICOH583_ID_##_id,			\
+	.name	= "ricoh583-regulator",			\
+	.platform_data	= &pdata_##_name##_##_sname,	\
+}
 
-	.num_subdevs	= ARRAY_SIZE(max77663_subdevs),
-	.sub_devices	= max77663_subdevs,
+#define RICOH583_DEV_COMMON_E118X 		\
+	RICOH_REG(DC0, dc0, 0),			\
+	RICOH_REG(DC1, dc1, skubit0_0),		\
+	RICOH_REG(DC2, dc2, 0),		\
+	RICOH_REG(DC3, dc3, 0),		\
+	RICOH_REG(LDO0, ldo8, 0),		\
+	RICOH_REG(LDO1, ldo7, 0),		\
+	RICOH_REG(LDO2, ldo6, 0),		\
+	RICOH_REG(LDO3, ldo5, 0),		\
+	RICOH_REG(LDO4, ldo4, 0),		\
+	RICOH_REG(LDO5, ldo3, 0),		\
+	RICOH_REG(LDO6, ldo0, 0),		\
+	RICOH_REG(LDO7, ldo1, 0),		\
+	RICOH_REG(LDO8, ldo2, 0),		\
+	RICOH_RTC_REG()
+
+static struct ricoh583_subdev_info ricoh_devs_e118x_dcdc[] = {
+	RICOH583_DEV_COMMON_E118X,
 };
 
-static struct i2c_board_info __initdata max77663_regulators[] = {
+#define RICOH_GPIO_INIT(_init_apply, _pulldn, _output_mode, _output_val) \
+	{					\
+		.pulldn_en = _pulldn,		\
+		.output_mode_en = _output_mode,	\
+		.output_val = _output_val,	\
+		.init_apply = _init_apply,	\
+	}
+struct ricoh583_gpio_init_data ricoh_gpio_data[] = {
+	RICOH_GPIO_INIT(false, false, false, 0),
+	RICOH_GPIO_INIT(false, false, false, 0),
+	RICOH_GPIO_INIT(false, false, false, 0),
+	RICOH_GPIO_INIT(true,  false,  true, 1),
+	RICOH_GPIO_INIT(true,  false, true, 1),
+	RICOH_GPIO_INIT(false, false, false, 0),
+	RICOH_GPIO_INIT(false, false, false, 0),
+	RICOH_GPIO_INIT(false, false, false, 0),
+};
+
+static struct ricoh583_platform_data ricoh_platform = {
+	.irq_base	= RICOH583_IRQ_BASE,
+	.gpio_base	= RICOH583_GPIO_BASE,
+	.gpio_init_data = ricoh_gpio_data,
+	.num_gpioinit_data = ARRAY_SIZE(ricoh_gpio_data),
+	.enable_shutdown_pin = true,
+};
+
+static struct i2c_board_info __initdata ricoh583_regulators[] = {
 	{
-		/* The I2C address was determined by OTP factory setting */
-		I2C_BOARD_INFO("max77663", 0x1C),
+		I2C_BOARD_INFO("ricoh583", 0x34),
 		.irq		= INT_EXTERNAL_PMU,
-		.platform_data	= &max7763_pdata,
+		.platform_data	= &ricoh_platform,
 	},
 };
 
-int __init cardhu_pm298_regulator_init(void)
+/* TPS62361B DC-DC converter */
+static struct regulator_consumer_supply tps6236x_dcdc_supply[] = {
+	REGULATOR_SUPPLY("vdd_core", NULL),
+};
+
+static struct tps6236x_regulator_platform_data tps6236x_pdata = {
+	.reg_init_data = {					\
+		.constraints = {				\
+			.min_uV = 500000,			\
+			.max_uV = 1770000,			\
+			.valid_modes_mask = (REGULATOR_MODE_NORMAL |  \
+					     REGULATOR_MODE_STANDBY), \
+			.valid_ops_mask = (REGULATOR_CHANGE_MODE |    \
+					   REGULATOR_CHANGE_STATUS |  \
+					   REGULATOR_CHANGE_VOLTAGE), \
+			.always_on = 1,				\
+			.boot_on =  1,				\
+			.apply_uV = 0,				\
+		},						\
+		.num_consumer_supplies = ARRAY_SIZE(tps6236x_dcdc_supply), \
+		.consumer_supplies = tps6236x_dcdc_supply,		\
+		},							\
+	.internal_pd_enable = 0,					\
+	.vsel = 3,							\
+	.init_uV = -1,							\
+	.init_apply = 0,						\
+};
+
+static struct i2c_board_info __initdata tps6236x_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("tps62361B", 0x60),
+		.platform_data	= &tps6236x_pdata,
+	},
+};
+
+int __init tf201_pm299_regulator_init(void)
 {
-	struct board_info board_info;
-	struct board_info pmu_board_info;
 	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
 	u32 pmc_ctrl;
 
@@ -354,49 +323,53 @@ int __init cardhu_pm298_regulator_init(void)
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
-	/* The regulator details have complete constraints */
-	tegra_get_board_info(&board_info);
-	tegra_get_pmu_board_info(&pmu_board_info);
-	if (pmu_board_info.board_id != BOARD_PMU_PM298) {
-		pr_err("%s(): Board ID is not proper\n", __func__);
-		return -ENODEV;
-	}
+	/* If TPS6236x DCDC is there then consumer for dc1 should
+	 * not have vdd_core */
+	pdata_dc1_skubit0_0.regulator.consumer_supplies =
+				ricoh583_dc1_supply_skubit0_1;
+	pdata_dc1_skubit0_0.regulator.num_consumer_supplies =
+			ARRAY_SIZE(ricoh583_dc1_supply_skubit0_1);
 
-	i2c_register_board_info(4, max77663_regulators,
-				ARRAY_SIZE(max77663_regulators));
+	ricoh_platform.num_subdevs = ARRAY_SIZE(ricoh_devs_e118x_dcdc);
+	ricoh_platform.subdevs = ricoh_devs_e118x_dcdc;
+
+	i2c_register_board_info(4, ricoh583_regulators, 1);
+
+	pr_info("Registering the device TPS62361B\n");
+	i2c_register_board_info(4, tps6236x_boardinfo, 1);
 
 	return 0;
 }
 
-static struct regulator_consumer_supply gpio_switch_en_track_ldo2_supply[] = {
-	REGULATOR_SUPPLY("avdd_sata", NULL),
-	REGULATOR_SUPPLY("vdd_sata", NULL),
-	REGULATOR_SUPPLY("avdd_sata_pll", NULL),
-	REGULATOR_SUPPLY("avdd_plle", NULL),
-};
-static int gpio_switch_en_track_ldo2_voltages[] = { 3300};
-
-static struct regulator_consumer_supply gpio_switch_en_5v0_supply[] = {
-	REGULATOR_SUPPLY("vdd_5v0_sys", NULL),
+/* EN_5V_CP from PMU GP0 */
+static struct regulator_consumer_supply gpio_switch_en_5v_cp_supply[] = {
 	REGULATOR_SUPPLY("vdd_5v0_sby", NULL),
 	REGULATOR_SUPPLY("vdd_hall", NULL),
 	REGULATOR_SUPPLY("vterm_ddr", NULL),
 	REGULATOR_SUPPLY("v2ref_ddr", NULL),
 };
+static int gpio_switch_en_5v_cp_voltages[] = { 5000};
+
+/* EN_5V0 From PMU GP2 */
+static struct regulator_consumer_supply gpio_switch_en_5v0_supply[] = {
+	REGULATOR_SUPPLY("vdd_5v0_sys", NULL),
+};
 static int gpio_switch_en_5v0_voltages[] = { 5000};
 
+/* EN_DDR From PMU GP6 */
 static struct regulator_consumer_supply gpio_switch_en_ddr_supply[] = {
 	REGULATOR_SUPPLY("mem_vddio_ddr", NULL),
 	REGULATOR_SUPPLY("t30_vddio_ddr", NULL),
 };
 static int gpio_switch_en_ddr_voltages[] = { 1500};
 
+/* EN_3V3_SYS From PMU GP7 */
 static struct regulator_consumer_supply gpio_switch_en_3v3_sys_supply[] = {
-	REGULATOR_SUPPLY("avdd_vdac", NULL),
 	REGULATOR_SUPPLY("vdd_lvds", NULL),
 	REGULATOR_SUPPLY("vdd_pnl", NULL),
 	REGULATOR_SUPPLY("vcom_3v3", NULL),
 	REGULATOR_SUPPLY("vdd_3v3", NULL),
+	REGULATOR_SUPPLY("vcore_mmc", NULL),
 	REGULATOR_SUPPLY("vddio_pex_ctl", NULL),
 	REGULATOR_SUPPLY("pwrdet_pex_ctl", NULL),
 	REGULATOR_SUPPLY("hvdd_pex_pmu", NULL),
@@ -435,7 +408,6 @@ static struct regulator_consumer_supply gpio_switch_en_3v3_sys_supply[] = {
 	REGULATOR_SUPPLY("vdd_3v3_cam", NULL),
 	REGULATOR_SUPPLY("vdd_3v3_als", NULL),
 	REGULATOR_SUPPLY("debug_cons", NULL),
-	REGULATOR_SUPPLY("vdd", "4-004c"),
 };
 static int gpio_switch_en_3v3_sys_voltages[] = { 3300};
 
@@ -610,10 +582,10 @@ static int disable_load_switch_rail(
 	}
 
 /* common to most of boards*/
-GREG_INIT(0, en_track_ldo2,	en_track_ldo2,	NULL,			0,	0,	MAX77663_GPIO_BASE + MAX77663_GPIO0,	false,	0,	0,	0,	0);
-GREG_INIT(1, en_5v0,		en_5v0,		NULL,			1,      0,      MAX77663_GPIO_BASE + MAX77663_GPIO2,	false,	1,	0,	0,	0);
-GREG_INIT(2, en_ddr,		en_ddr,		NULL,			1,      0,      MAX77663_GPIO_BASE + MAX77663_GPIO3,	false,	1,	0,	0,	0);
-GREG_INIT(3, en_3v3_sys,	en_3v3_sys,	NULL,			1,      0,      MAX77663_GPIO_BASE + MAX77663_GPIO1,	false,	1,	0,	0,	0);
+GREG_INIT(0, en_5v_cp,		en_5v_cp,	NULL,			1,	0,	TPS6591X_GPIO_0,	false,	1,	0,	0,	0);
+GREG_INIT(1, en_5v0,		en_5v0,		NULL,			0,      0,      TPS6591X_GPIO_4,	false,	0,	0,	0,	0);
+GREG_INIT(2, en_ddr,		en_ddr,		NULL,			0,      0,      TPS6591X_GPIO_3,	false,	1,	0,	0,	0);
+GREG_INIT(3, en_3v3_sys,	en_3v3_sys,	NULL,			0,      0,      TPS6591X_GPIO_1,	false,	0,	0,	0,	0);
 GREG_INIT(4, en_vdd_bl,		en_vdd_bl,	NULL,			0,      0,      TEGRA_GPIO_PK3,		false,	1,	0,	0,	0);
 GREG_INIT(5, en_3v3_modem,	en_3v3_modem,	NULL,			1,      0,      TEGRA_GPIO_PD6,		false,	1,	0,	0,	0);
 GREG_INIT(6, en_vdd_pnl1,	en_vdd_pnl1,	"vdd_3v3_devices",	0,      0,      TEGRA_GPIO_PL4,		false,	1,	0,	0,	0);
@@ -632,6 +604,8 @@ GREG_INIT(6, en_vdd_pnl1_pm269,		en_vdd_pnl1,		"vdd_3v3_devices",
 	0,      0,      TEGRA_GPIO_PW1,	false,	1,	0,	0,	0);
 GREG_INIT(9, en_3v3_fuse_pm269,		en_3v3_fuse,		"vdd_3v3_devices",
 	0,      0,      TEGRA_GPIO_PC1,	false,	0,	0,	0,	0);
+GREG_INIT(11, en_vdd_sdmmc1_pm269,	en_vdd_sdmmc1,		"vdd_3v3_devices",
+	0,      0,      TEGRA_GPIO_PP1,	false,	1,	0,	0,	0);
 GREG_INIT(12, en_3v3_pex_hvdd_pm269,	en_3v3_pex_hvdd,	"hvdd_pex_pmu",
 	0,      0,      TEGRA_GPIO_PC6,	false,	0,	0,	0,	0);
 GREG_INIT(17, en_vddio_vid_oc_pm269,	en_vddio_vid_oc,	"master_5v_switch",
@@ -660,7 +634,7 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 #define ADD_GPIO_REG(_name) &gpio_pdata_##_name
 
 #define COMMON_GPIO_REG \
-	ADD_GPIO_REG(en_track_ldo2),		\
+	ADD_GPIO_REG(en_5v_cp),			\
 	ADD_GPIO_REG(en_5v0),			\
 	ADD_GPIO_REG(en_ddr),			\
 	ADD_GPIO_REG(en_3v3_sys),		\
@@ -677,7 +651,7 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 	ADD_GPIO_REG(en_1v8_cam),
 
 #define PM269_GPIO_REG \
-	ADD_GPIO_REG(en_track_ldo2),		\
+	ADD_GPIO_REG(en_5v_cp),			\
 	ADD_GPIO_REG(en_5v0),			\
 	ADD_GPIO_REG(en_ddr),			\
 	ADD_GPIO_REG(en_vdd_bl_pm269),		\
@@ -690,6 +664,7 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 	ADD_GPIO_REG(en_vdd_com),		\
 	ADD_GPIO_REG(en_3v3_fuse_pm269),	\
 	ADD_GPIO_REG(en_3v3_emmc),		\
+	ADD_GPIO_REG(en_vdd_sdmmc1_pm269),	\
 	ADD_GPIO_REG(en_3v3_pex_hvdd_pm269),	\
 	ADD_GPIO_REG(en_1v8_cam),		\
 	ADD_GPIO_REG(dis_5v_switch_e118x),	\
@@ -705,11 +680,6 @@ GREG_INIT(22, en_vbrtr,		en_vbrtr,	"vdd_3v3_devices",	0,      0,      PMU_TCA641
 	ADD_GPIO_REG(en_vddio_vid_oc_e118x),	\
 	ADD_GPIO_REG(en_vbrtr),
 
-/* Gpio switch regulator platform data  for E1186/E1187/E1256*/
-static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_e118x[] = {
-	COMMON_GPIO_REG
-	E118x_GPIO_REG
-};
 
 /* Gpio switch regulator platform data for PM269*/
 static struct gpio_switch_regulator_subdev_data *gswitch_subdevs_pm269[] = {
@@ -725,26 +695,14 @@ static struct platform_device gswitch_regulator_pdata = {
 	},
 };
 
-int __init cardhu_pm298_gpio_switch_regulator_init(void)
+int __init tf201_pm299_gpio_switch_regulator_init(void)
 {
 	int i;
 	struct board_info board_info;
 	tegra_get_board_info(&board_info);
 
-	switch (board_info.board_id) {
-	case BOARD_PM269:
-	case BOARD_PM305:
-	case BOARD_PM311:
-	case BOARD_E1257:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
-		gswitch_pdata.subdevs = gswitch_subdevs_pm269;
-		break;
-
-	default:
-		gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_e118x);
-		gswitch_pdata.subdevs = gswitch_subdevs_e118x;
-		break;
-	}
+	gswitch_pdata.num_subdevs = ARRAY_SIZE(gswitch_subdevs_pm269);
+	gswitch_pdata.subdevs = gswitch_subdevs_pm269;
 
 	for (i = 0; i < gswitch_pdata.num_subdevs; ++i) {
 		struct gpio_switch_regulator_subdev_data *gswitch_data =
