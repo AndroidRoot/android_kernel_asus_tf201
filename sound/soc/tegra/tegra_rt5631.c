@@ -153,7 +153,7 @@ static int tegra_rt5631_init(struct snd_soc_pcm_runtime *rtd)
 
 	int ret;
 	printk("%s+\n", __func__);
-	if (machine_is_cardhu() || machine_is_ventana()) {
+	if (machine_is_tf201() || machine_is_cardhu() || machine_is_ventana()) {
 		ret = snd_soc_add_controls(codec, cardhu_controls,
 				ARRAY_SIZE(cardhu_controls));
 		if (ret < 0)

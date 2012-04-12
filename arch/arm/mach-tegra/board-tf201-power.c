@@ -1048,7 +1048,7 @@ static struct platform_device tf201_charger_device = {
 static int __init tf201_charger_late_init(void)
 {
 	// required because bootloader identifies as cardhu
-	if (!machine_is_cardhu())
+	if (!machine_is_tf201())
 		return 0;
 
 	platform_device_register(&tf201_charger_device);
