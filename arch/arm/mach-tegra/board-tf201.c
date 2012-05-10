@@ -836,7 +836,7 @@ static void __init tegra_tf201_reserve(void)
 
 // Has to be cardhu to match bootloader.
 // This board is NOT cardhu, but derived from it.
-MACHINE_START(TF201, "tf201")
+MACHINE_START(TF201, "cardhu")
 	.boot_params    = 0x80000100,
 	.map_io         = tegra_map_common_io,
 	.reserve        = tegra_tf201_reserve,
