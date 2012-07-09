@@ -110,7 +110,14 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 	do { } while (1);
 #else
 	void __iomem *reset = IO_ADDRESS(TEGRA_PMC_BASE + 0x00);
+	void __iomem *scratch0 = IO_ADDRESS(TEGRA_PMC_BASE + 0x50);
 	u32 reg;
+
+	if (strncmp(cmd, "apx", 3)==0) {
+		/* Set scratch0 register to boot APX mode */
+		reg = 2;
+		writel_relaxed(reg, scratch0);
+	}
 
 	/* use *_related to avoid spinlock since caches are off */
 	reg = readl_relaxed(reset);
