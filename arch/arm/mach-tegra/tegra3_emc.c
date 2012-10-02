@@ -1,7 +1,7 @@
 /*
  * arch/arm/mach-tegra/tegra3_emc.c
  *
- * Copyright (C) 2012 NVIDIA Corporation
+ * Copyright (C) 2011 NVIDIA Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1017,7 +1017,7 @@ static struct notifier_block tegra_emc_resume_nb = {
 	.priority = -1,
 };
 
-void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
+int tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 {
 	int i, mv;
 	u32 reg;
@@ -1035,18 +1035,18 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 
 	if ((dram_type != DRAM_TYPE_DDR3) && (dram_type != DRAM_TYPE_LPDDR2)) {
 		pr_err("tegra: not supported DRAM type %u\n", dram_type);
-		return;
+		return 0;
 	}
 
 	if (emc->parent != tegra_get_clock_by_name("pll_m")) {
 		pr_err("tegra: boot parent %s is not supported by EMC DFS\n",
 			emc->parent->name);
-		return;
+		return 0;
 	}
 
 	if (!table || !table_size) {
 		pr_err("tegra: EMC DFS table is empty\n");
-		return;
+		return 0;
 	}
 
 	tegra_emc_table_size = min(table_size, TEGRA_EMC_TABLE_MAX_SIZE);
@@ -1102,13 +1102,13 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 		pr_err("tegra: invalid EMC DFS table: maximum rate %lu kHz does"
 		       " not match nominal voltage %d\n",
 		       max_rate, emc->dvfs->max_millivolts);
-		return;
+		return 0;
 	}
 
 	if (!is_emc_bridge()) {
 		tegra_emc_table = NULL;
 		pr_err("tegra: invalid EMC DFS table: emc bridge not found");
-		return;
+		return 0;
 	}
 	pr_info("tegra: validated EMC DFS table\n");
 
@@ -1120,6 +1120,8 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 
 	register_pm_notifier(&tegra_emc_suspend_nb);
 	register_pm_notifier(&tegra_emc_resume_nb);
+
+	return 1;
 }
 
 void tegra_emc_timing_invalidate(void)

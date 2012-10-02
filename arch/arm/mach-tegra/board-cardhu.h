@@ -177,6 +177,25 @@
 #define CAMERA_FLASH_SYNC_GPIO		TEGRA_GPIO_PBB3
 #define CAMERA_FLASH_MAX_TORCH_AMP	7
 #define CAMERA_FLASH_MAX_FLASH_AMP	7
+/* CAMERA RELATED GPIOs on TF201*/
+#define ISP_POWER_1V2_EN_GPIO       TEGRA_GPIO_PS3      //ISP_1V2_EN VDD_ISP_1V2
+#define ISP_POWER_RESET_GPIO        TEGRA_GPIO_PBB0     //CAM_RST_5M, RSTX
+#define FRONT_YUV_SENSOR_RST_GPIO	TEGRA_GPIO_PO0      //1.2M CAM_RST
+
+//TF700T
+#define TF700T_ISP_POWER_1V2_EN_GPIO       TEGRA_GPIO_PR7      //ISP_1V2_EN VDD_ISP_1V2
+#define TF700T_ISP_POWER_1V8_EN_GPIO       TEGRA_GPIO_PBB7     //ISP_1V8_EN VDD_ISP_1V8
+
+//TF300T, TF500T
+#define ICATCH7002A_RST_GPIO TEGRA_GPIO_PBB0
+#define ICATCH7002A_AF_PWR_EN_GPIO TEGRA_GPIO_PS0
+#define ICATCH7002A_VDDIO_EN_GPIO TEGRA_GPIO_PBB4
+#define ICATCH7002A_PWR_DN_GPIO TEGRA_GPIO_PBB5
+#define ICATCH7002A_VDDC_EN_GPIO TEGRA_GPIO_PBB7
+#define ICATCH7002A_VDDA_EN_GPIO TEGRA_GPIO_PR6  //KB_ROW6
+#define ICATCH7002A_ISP_1V2_EN TEGRA_GPIO_PS3   //For TF500T; PBB7 in other porjects
+#define ICATCH7002A_CAM_2V85_EN TEGRA_GPIO_PR7
+
 
 /* PCA954x I2C bus expander bus addresses */
 #define PCA954x_I2C_BUS_BASE	6
@@ -209,8 +228,6 @@ int cardhu_sdhci_init(void);
 int cardhu_pinmux_init(void);
 int cardhu_panel_init(void);
 int cardhu_sensors_init(void);
-int cardhu_kbc_init(void);
-int cardhu_scroll_init(void);
 int cardhu_keys_init(void);
 int cardhu_pins_state_init(void);
 int cardhu_emc_init(void);
@@ -220,24 +237,61 @@ int cardhu_pm298_gpio_switch_regulator_init(void);
 int cardhu_pm298_regulator_init(void);
 int cardhu_pm299_gpio_switch_regulator_init(void);
 int cardhu_pm299_regulator_init(void);
+struct platform_device *tegra_usb3_utmip_host_register(void);
+void tegra_usb3_utmip_host_unregister(struct platform_device *pdev);
 
-#define MPU_TYPE_MPU3050	1
-#define MPU_TYPE_MPU6050	2
-#define MPU_GYRO_TYPE		MPU_TYPE_MPU3050
+/* Invensense MPU Definitions */
+#define MPU3050_GYRO_NAME		"mpu3050"
+#define MPU6050_GYRO_NAME		"mpu6050"
 #define MPU_GYRO_IRQ_GPIO	TEGRA_GPIO_PX1
-#define MPU_GYRO_ADDR		0x68
+#define MPU3050_GYRO_ADDR		0x68
+#define MPU6050_GYRO_ADDR		0x69
+#define MPU6050_TF500T_GYRO_ADDR		0x68
 #define MPU_GYRO_BUS_NUM	2
 #define MPU_GYRO_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
 #define MPU_ACCEL_NAME		"kxtf9"
-#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PL1
+#define MPU_ACCEL_IRQ_GPIO	TEGRA_GPIO_PO5
 #define MPU_ACCEL_ADDR		0x0F
 #define MPU_ACCEL_BUS_NUM	2
-#define MPU_ACCEL_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
-#define MPU_COMPASS_NAME	"ak8975"
-#define MPU_COMPASS_IRQ_GPIO	0
-#define MPU_COMPASS_ADDR	0x0C
+#define MPU_ACCEL_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define MPU_COMPASS_NAME	"ami306"
+#define MPU_COMPASS_IRQ_GPIO	TEGRA_GPIO_PW0
+#define MPU_COMPASS_ADDR	0x0E
 #define MPU_COMPASS_BUS_NUM	2
-#define MPU_COMPASS_ORIENTATION	{ 1, 0, 0, 0, 1, 0, 0, 0, 1 }
+#define MPU_COMPASS_ORIENTATION	{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+
+//Sensors orientation matrix for TF300T
+#define TF300T_GYRO_ORIENTATION		{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define TF300T_ACCEL_ORIENTATION		{ 0, 1, 0, 1, 0, 0, 0, 0, -1 }
+#define TF300T_COMPASS_ORIENTATION	{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
+
+//Sensors orientation matrix for TF300TG
+#define TF300TG_GYRO_ORIENTATION		{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define TF300TG_ACCEL_ORIENTATION		{ 0, 1, 0, 1, 0, 0, 0, 0, -1 }
+#define TF300TG_COMPASS_ORIENTATION	{ 1, 0, 0, 0, -1, 0, 0, 0, -1 }
+
+//Sensors orientation matrix for TF700T
+#define TF700T_GYRO_ORIENTATION		{ 0, 1, 0, 1, 0, 0, 0, 0, -1 }
+#define TF700T_ACCEL_ORIENTATION		{ 0, 1, 0, 1, 0, 0, 0, 0, -1 }
+#define TF700T_COMPASS_ORIENTATION	{ 1, 0, 0, 0, -1, 0, 0, 0, -1 }
+
+//Sensors orientation matrix for TF300TL
+#define TF300TL_GYRO_ORIENTATION		{ -1, 0, 0, 0, 1, 0, 0, 0, -1 }
+#define TF300TL_ACCEL_ORIENTATION		{ 0, 1, 0, 1, 0, 0, 0, 0, -1 }
+#define TF300TL_COMPASS_ORIENTATION	{ -1, 0, 0, 0, -1, 0, 0, 0, 1 }
+
+//Sensors orientation matrix for TF500T
+#define TF500T_GYRO_ORIENTATION		{ 0, -1, 0, 1, 0, 0, 0, 0, 1 }
+#define TF500T_COMPASS_ORIENTATION	{ 0, -1, 0, 1, 0, 0, 0, 0, 1 }
+
+/* Kionix Accel sensor Definitions*/
+#define KIONIX_ACCEL_NAME	"KXT_9"
+#define KIONIX_ACCEL_IRQ_GPIO	TEGRA_GPIO_PO5
+#define KIONIX_ACCEL_ADDR		0x0F
+#define KIONIX_ACCEL_BUS_NUM	2
+
+//Sensors orientation matrix for P1801
+#define P1801_ACCEL_ORIENTATION		{ 0, -1, 0, -1, 0, 0, 0, 0, -1 }
 
 /* Baseband GPIO addresses */
 #define BB_GPIO_BB_EN			TEGRA_GPIO_PR5

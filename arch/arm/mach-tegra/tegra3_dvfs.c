@@ -27,6 +27,7 @@
 #include "fuse.h"
 #include "board.h"
 #include "tegra3_emc.h"
+#include <mach/board-cardhu-misc.h>
 
 static bool tegra_dvfs_cpu_disabled;
 static bool tegra_dvfs_core_disabled;
@@ -848,7 +849,7 @@ core_cap_state_store(struct kobject *kobj, struct kobj_attribute *attr,
 		if (user_core_cap.refcnt == 1)
 			core_cap_enable(true);
 	} else if (user_core_cap.refcnt) {
-		user_core_cap.refcnt--;
+		user_core_cap.refcnt=0;
 		if (user_core_cap.refcnt == 0)
 			core_cap_enable(false);
 	}
@@ -872,7 +873,10 @@ core_cap_level_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 	if (sscanf(buf, "%d", &level) != 1)
 		return -1;
-
+	if(tegra3_get_project_id() == TEGRA3_PROJECT_TF700T){
+		printk("force vdd_core of Tf700t as 1300mV !\n");
+		level=1300;
+	}
 	mutex_lock(&core_cap_lock);
 	user_core_cap.level = level;
 	core_cap_update();

@@ -347,6 +347,7 @@ static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 	    netif_device_present (dev->net) &&
 	    !test_bit (EVENT_RX_HALT, &dev->flags) &&
 	    !test_bit (EVENT_DEV_ASLEEP, &dev->flags)) {
+		usb_mark_last_busy(dev->udev);
 		switch (retval = usb_submit_urb (urb, GFP_ATOMIC)) {
 		case -EPIPE:
 			usbnet_defer_kevent (dev, EVENT_RX_HALT);
@@ -1386,8 +1387,15 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		// can rename the link if it knows better.
 		if ((dev->driver_info->flags & FLAG_ETHER) != 0 &&
 		    ((dev->driver_info->flags & FLAG_POINTTOPOINT) == 0 ||
-		     (net->dev_addr [0] & 0x02) == 0))
-			strcpy (net->name, "eth%d");
+		     (net->dev_addr [0] & 0x02) == 0)) {
+			if (xdev->descriptor.idVendor == 0x05c6 &&
+					(xdev->descriptor.idProduct == 0x900d) || (xdev->descriptor.idProduct == 0x900b)) {
+				dev_dbg (&udev->dev, "This is Qualcomm's modem. Lets name it as rmnet.\n");
+				strcpy (net->name, "rmnet%d");
+			} else {
+				strcpy (net->name, "eth%d");
+			}
+		}
 		/* WLAN devices should always be named "wlan%d" */
 		if ((dev->driver_info->flags & FLAG_WLAN) != 0)
 			strcpy(net->name, "wlan%d");

@@ -356,9 +356,9 @@ static struct usb_descriptor_header *eth_ss_function[] = {
 /* string descriptors: */
 
 static struct usb_string rndis_string_defs[] = {
-	[0].s = "RNDIS Communications Control",
-	[1].s = "RNDIS Ethernet Data",
-	[2].s = "RNDIS",
+	[0].s = "ASUS RNDIS Communications Control",
+	[1].s = "ASUS RNDIS Ethernet Data",
+	[2].s = "ASUS Android USB Ethernet/RNDIS",
 	{  } /* end of list */
 };
 

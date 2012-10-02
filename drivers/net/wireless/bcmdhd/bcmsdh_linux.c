@@ -135,22 +135,22 @@ bcmsdh_chipmatch(uint16 vendor, uint16 device)
 #if defined(BCMPLATFORM_BUS)
 #if defined(BCMLXSDMMC)
 /* forward declarations */
-int bcmsdh_probe_bcmdhd(struct device *dev);
-int bcmsdh_remove_bcmdhd(struct device *dev);
+int bcmsdh_probe(struct device *dev);
+int bcmsdh_remove(struct device *dev);
 
-EXPORT_SYMBOL(bcmsdh_probe_bcmdhd);
-EXPORT_SYMBOL(bcmsdh_remove_bcmdhd);
+EXPORT_SYMBOL(bcmsdh_probe);
+EXPORT_SYMBOL(bcmsdh_remove);
 
 #else
 /* forward declarations */
-static int __devinit bcmsdh_probe_bcmdhd(struct device *dev);
-static int __devexit bcmsdh_remove_bcmdhd(struct device *dev);
+static int __devinit bcmsdh_probe(struct device *dev);
+static int __devexit bcmsdh_remove(struct device *dev);
 #endif /* BCMLXSDMMC */
 
 #ifndef BCMLXSDMMC
 static
 #endif /* BCMLXSDMMC */
-int bcmsdh_probe_bcmdhd(struct device *dev)
+int bcmsdh_probe(struct device *dev)
 {
 	osl_t *osh = NULL;
 	bcmsdh_hc_t *sdhc = NULL;
@@ -229,14 +229,13 @@ int bcmsdh_probe_bcmdhd(struct device *dev)
 	/* chain SDIO Host Controller info together */
 	sdhc->next = sdhcinfo;
 	sdhcinfo = sdhc;
+
 	/* Read the vendor/device ID from the CIS */
 	vendevid = bcmsdh_query_device(sdh);
-
-
 	/* try to attach to the target device */
 	if (!(sdhc->ch = drvinfo.attach((vendevid >> 16),
 					func->device, 0, 0, 0, 0,
-					(void *)regs, NULL, sdh, dev))) {
+					(void *)regs, NULL, sdh))) {
 		SDLX_MSG(("%s: device attach failed\n", __FUNCTION__));
 		goto err;
 	}
@@ -258,7 +257,7 @@ err:
 #ifndef BCMLXSDMMC
 static
 #endif /* BCMLXSDMMC */
-int bcmsdh_remove_bcmdhd(struct device *dev)
+int bcmsdh_remove(struct device *dev)
 {
 	bcmsdh_hc_t *sdhc, *prev;
 	osl_t *osh;
@@ -454,7 +453,7 @@ bcmsdh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* try to attach to the target device */
 	if (!(sdhc->ch = drvinfo.attach(VENDOR_BROADCOM, /* pdev->vendor, */
 	                                bcmsdh_query_device(sdh) & 0xFFFF, 0, 0, 0, 0,
-	                                (void *)regs, NULL, sdh, pdev->dev))) {
+	                                (void *)regs, NULL, sdh))) {
 		SDLX_MSG(("%s: device attach failed\n", __FUNCTION__));
 		goto err;
 	}

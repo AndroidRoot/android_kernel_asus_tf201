@@ -417,7 +417,8 @@ static char do_decode_rx_error(struct tegra_uart_port *t, u8 lsr)
 			/* Overrrun error  */
 			flag |= TTY_OVERRUN;
 			t->uport.icount.overrun++;
-			dev_err(t->uport.dev, "Got overrun errors\n");
+                     if (t->uport.icount.overrun%100 == 0)
+			    dev_err(t->uport.dev, "Got overrun errors\n");
 		} else if (lsr & UART_LSR_PE) {
 			/* Parity error */
 			flag |= TTY_PARITY;
@@ -509,12 +510,14 @@ static void tegra_tx_dma_complete_callback(struct tegra_dma_req *req)
 	/* Update xmit pointers without lock if dma aborted. */
 	if (req->status == -TEGRA_DMA_REQ_ERROR_ABORTED) {
 		xmit->tail = (xmit->tail + count) & (UART_XMIT_SIZE - 1);
+                t->uport.icount.tx+= count;
 		t->tx_in_progress = 0;
 		return;
 	}
 
 	spin_lock_irqsave(&t->uport.lock, flags);
 	xmit->tail = (xmit->tail + count) & (UART_XMIT_SIZE - 1);
+        t->uport.icount.tx+= count;
 	t->tx_in_progress = 0;
 
 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
@@ -1664,7 +1667,7 @@ static struct platform_driver tegra_uart_platform_driver __refdata= {
 static int __init tegra_uart_init(void)
 {
 	int ret;
-
+        printk(KERN_INFO "%s+ #####\n", __func__);
 	ret = uart_register_driver(&tegra_uart_driver);
 	if (unlikely(ret)) {
 		pr_err("Could not register %s driver\n",
@@ -1678,7 +1681,7 @@ static int __init tegra_uart_init(void)
 		uart_unregister_driver(&tegra_uart_driver);
 		return ret;
 	}
-
+        printk(KERN_INFO "%s- #####\n", __func__);
 	pr_info("Initialized tegra uart driver\n");
 	return 0;
 }

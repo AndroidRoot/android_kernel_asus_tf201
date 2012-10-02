@@ -1,6 +1,5 @@
 GCOV_PROFILE := y
 
-subdir-ccflags-y := -Werror
 
 # Tegra platform Support
 snd-soc-tegra-pcm-objs := tegra_pcm.o
@@ -26,20 +25,27 @@ obj-$(CONFIG_SND_SOC_TEGRA20_SPDIF) += snd-soc-tegra20-spdif.o
 obj-$(CONFIG_SND_SOC_TEGRA30_SPDIF) += snd-soc-tegra30-spdif.o
 
 # Tegra machine Support
+snd-soc-tegra-rt5631-objs := tegra_rt5631.o
 snd-soc-tegra-wm8903-objs := tegra_wm8903.o
 snd-soc-tegra-trimslice-objs := trimslice.o
 snd-soc-tegra-wm8753-objs := tegra_wm8753.o
 snd-soc-tegra-max98088-objs := tegra_max98088.o
 snd-soc-tegra-aic326x-objs := tegra_aic326x.o
 snd-soc-tegra-rt5640-objs := tegra_rt5640.o
+snd-soc-tegra-rt5642-objs := tegra_rt5640.o
 snd-soc-tegra-max98095-objs := tegra_max98095.o
 snd-soc-tegra-p1852-objs := tegra_p1852.o
 
+obj-$(CONFIG_SND_SOC_TEGRA_RT5631) += snd-soc-tegra-rt5631.o
 obj-$(CONFIG_SND_SOC_TEGRA_WM8903) += snd-soc-tegra-wm8903.o
 obj-$(CONFIG_SND_SOC_TEGRA_TRIMSLICE) += snd-soc-tegra-trimslice.o
 obj-$(CONFIG_SND_SOC_TEGRA_WM8753) += snd-soc-tegra-wm8753.o
 obj-$(CONFIG_SND_SOC_TEGRA_MAX98088) += snd-soc-tegra-max98088.o
+obj-$(CONFIG_HEADSET_FUNCTION)	+= headset.o
+obj-$(CONFIG_DSP_FM34)		+= dsp/
 obj-$(CONFIG_SND_SOC_TEGRA_TLV320AIC326X) += snd-soc-tegra-aic326x.o
 obj-$(CONFIG_SND_SOC_TEGRA_RT5640) += snd-soc-tegra-rt5640.o
+obj-$(CONFIG_SND_SOC_TEGRA_RT5642) += snd-soc-tegra-rt5642.o
 obj-$(CONFIG_SND_SOC_TEGRA_MAX98095) += snd-soc-tegra-max98095.o
 obj-$(CONFIG_SND_SOC_TEGRA_P1852) += snd-soc-tegra-p1852.o
+obj-$(CONFIG_AUDIO_DOCK) += audio_dock.o

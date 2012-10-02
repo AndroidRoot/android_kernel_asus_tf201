@@ -49,6 +49,9 @@
 #if !defined(SDIO_DEVICE_ID_BROADCOM_4325)
 #define SDIO_DEVICE_ID_BROADCOM_4325	0x0493
 #endif /* !defined(SDIO_DEVICE_ID_BROADCOM_4325) */
+#if !defined(SDIO_DEVICE_ID_BROADCOM_4329)
+#define SDIO_DEVICE_ID_BROADCOM_4329	0x4329
+#endif /* !defined(SDIO_DEVICE_ID_BROADCOM_4329) */
 #if !defined(SDIO_DEVICE_ID_BROADCOM_4319)
 #define SDIO_DEVICE_ID_BROADCOM_4319	0x4319
 #endif /* !defined(SDIO_DEVICE_ID_BROADCOM_4319) */
@@ -96,9 +99,8 @@ PBCMSDH_SDMMC_INSTANCE gInstance;
 /* Maximum number of bcmsdh_sdmmc devices supported by driver */
 #define BCMSDH_SDMMC_MAX_DEVICES 1
 
-extern int bcmsdh_probe_bcmdhd(struct device *dev);
-extern int bcmsdh_remove_bcmdhd(struct device *dev);
-
+extern int bcmsdh_probe(struct device *dev);
+extern int bcmsdh_remove(struct device *dev);
 extern volatile bool dhd_mmc_suspend;
 
 static int bcmsdh_sdmmc_probe(struct sdio_func *func,
@@ -118,8 +120,8 @@ static int bcmsdh_sdmmc_probe(struct sdio_func *func,
 		gInstance->func[0] = &sdio_func_0;
 		if(func->device == 0x4) { /* 4318 */
 			gInstance->func[2] = NULL;
-			sd_trace(("NIC found, calling bcmsdh_probe_bcmdhd...\n"));
-			ret = bcmsdh_probe_bcmdhd(&func->dev);
+			sd_trace(("NIC found, calling bcmsdh_probe...\n"));
+			ret = bcmsdh_probe(&func->dev);
 		}
 	}
 
@@ -129,8 +131,8 @@ static int bcmsdh_sdmmc_probe(struct sdio_func *func,
 #ifdef WL_CFG80211
 		wl_cfg80211_set_parent_dev(&func->dev);
 #endif
-		sd_trace(("F2 found, calling bcmsdh_probe_bcmdhd...\n"));
-		ret = bcmsdh_probe_bcmdhd(&func->dev);
+		sd_trace(("F2 found, calling bcmsdh_probe...\n"));
+		ret = bcmsdh_probe(&func->dev);
 	}
 
 	return ret;
@@ -145,8 +147,8 @@ static void bcmsdh_sdmmc_remove(struct sdio_func *func)
 	sd_info(("Function#: 0x%04x\n", func->num));
 
 	if (func->num == 2) {
-		sd_trace(("F2 found, calling bcmsdh_remove_bcmdhd...\n"));
-		bcmsdh_remove_bcmdhd(&func->dev);
+		sd_trace(("F2 found, calling bcmsdh_remove...\n"));
+		bcmsdh_remove(&func->dev);
 	} else if (func->num == 1) {
 		sdio_claim_host(func);
 		sdio_disable_func(func);
@@ -160,11 +162,13 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_DEFAULT) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4325_SDGWB) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4325) },
+	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4329) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4319) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4330) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4334) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_4324) },
 	{ SDIO_DEVICE(SDIO_VENDOR_ID_BROADCOM, SDIO_DEVICE_ID_BROADCOM_43239) },
+	{ SDIO_DEVICE_CLASS(SDIO_CLASS_NONE)		},
 	{ /* end: all zeroes */				},
 };
 
@@ -175,7 +179,7 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 {
 	struct sdio_func *func = dev_to_sdio_func(pdev);
 	mmc_pm_flag_t sdio_flags;
-	int ret = 0;
+	int ret;
 
 	if (func->num != 2)
 		return 0;
@@ -184,7 +188,6 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 
 	if (dhd_os_check_wakelock(bcmsdh_get_drvdata()))
 		return -EBUSY;
-
 
 	sdio_flags = sdio_get_host_pm_caps(func);
 
@@ -202,29 +205,11 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 
 #if defined(OOB_INTR_ONLY)
 	bcmsdh_oob_intr_set(0);
-#endif /* defined(OOB_INTR_ONLY) */
-
-	sdio_flags = sdio_get_host_pm_caps(func);
-
-	if (!(sdio_flags & MMC_PM_KEEP_POWER)) {
-		sd_err(("can't keep power while host "
-				"is suspended\n", __FUNCTION__));
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/* keep power while host suspended */
-	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
-	if (ret) {
-		sd_err(("error while trying to keep power\n", __FUNCTION__));
-		goto out;
-	}
-
+#endif	/* defined(OOB_INTR_ONLY) */
 	dhd_mmc_suspend = TRUE;
 	smp_mb();
 
-out:
-	return ret;
+	return 0;
 }
 
 static int bcmsdh_sdmmc_resume(struct device *pdev)
@@ -370,6 +355,7 @@ int sdio_function_init(void)
 /*
  * module cleanup
 */
+extern int bcmsdh_remove(struct device *dev);
 void sdio_function_cleanup(void)
 {
 	sd_trace(("%s Enter\n", __FUNCTION__));

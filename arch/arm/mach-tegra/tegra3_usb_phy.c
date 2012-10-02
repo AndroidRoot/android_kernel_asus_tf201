@@ -29,6 +29,7 @@
 #include <mach/clk.h>
 #include <mach/iomap.h>
 #include <mach/pinmux.h>
+#include <mach/board-cardhu-misc.h>
 #include "tegra_usb_phy.h"
 #include "gpio-names.h"
 #include "fuse.h"
@@ -1126,6 +1127,22 @@ static int utmi_phy_open(struct tegra_usb_phy *phy)
 
 	phy->utmi_xcvr_setup = utmi_phy_xcvr_setup_value(phy);
 
+	//add for TF201 eye diagram for PR devices and the FPC
+	if(phy->inst == 0 ||phy->inst == 2) {
+		if(tegra3_get_project_id() == TEGRA3_PROJECT_TF201){
+			if(phy->utmi_xcvr_setup >= 48) {
+				phy->utmi_xcvr_setup = phy->utmi_xcvr_setup - 48;
+			}else{
+				phy->utmi_xcvr_setup = 0;
+			}
+		} else {
+			phy->utmi_xcvr_setup = phy->utmi_xcvr_setup + 8;
+			if(phy->utmi_xcvr_setup > 63)
+				phy->utmi_xcvr_setup = 63;
+		}
+		pr_info("phy->inst = %d , phy->utmi_xcvr_setup=%d\n",phy->inst ,phy->utmi_xcvr_setup);
+	}
+
 	parent_rate = clk_get_rate(clk_get_parent(phy->pllu_clk));
 	for (i = 0; i < ARRAY_SIZE(utmip_freq_table); i++) {
 		if (utmip_freq_table[i].freq == parent_rate) {
@@ -1223,13 +1240,11 @@ static int utmi_phy_irq(struct tegra_usb_phy *phy)
 	void __iomem *base = phy->regs;
 	unsigned long val = 0;
 
-	if (phy->phy_clk_on) {
-		DBG("%s(%d) inst:[%d]\n", __func__, __LINE__, phy->inst);
-		DBG("USB_USBSTS[0x%x] USB_PORTSC[0x%x]\n",
-				readl(base + USB_USBSTS), readl(base + USB_PORTSC));
-		DBG("USB_USBMODE[0x%x] USB_USBCMD[0x%x]\n",
-				readl(base + USB_USBMODE), readl(base + USB_USBCMD));
-	}
+	DBG("%s(%d) inst:[%d]\n", __func__, __LINE__, phy->inst);
+	DBG("USB_USBSTS[0x%x] USB_PORTSC[0x%x]\n",
+			readl(base + USB_USBSTS), readl(base + USB_PORTSC));
+	DBG("USB_USBMODE[0x%x] USB_USBCMD[0x%x]\n",
+			readl(base + USB_USBMODE), readl(base + USB_USBCMD));
 
 	usb_phy_fence_read(phy);
 	/* check if there is any remote wake event */
@@ -1249,8 +1264,6 @@ static int utmi_phy_irq(struct tegra_usb_phy *phy)
 			val = readl(base + USB_PORTSC);
 			val &= ~(USB_PORTSC_WKCN | USB_PORTSC_RWC_BITS);
 			writel(val , (base + USB_PORTSC));
-		} else if (!phy->phy_clk_on) {
-			return IRQ_NONE;
 		}
 	}
 

@@ -10,6 +10,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <asm/mach-types.h>
 
 #include <linux/module.h>
 
@@ -326,6 +327,12 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+static char *key_descriptions[] = {
+	"KEY_VOLUMEDOWN",
+	"KEY_VOLUMEUP",
+	"KEY_POWER",
+};
+
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
@@ -346,6 +353,16 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
 	struct gpio_button_data *bdata =
 		container_of(work, struct gpio_button_data, work);
+
+	/* Valid keys were logged for debugging in machine grouper */
+	const struct gpio_keys_button *button = bdata->button;
+	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0)
+			^ button->active_low;
+
+	if ((machine_is_cardhu()) &&
+		(button->code <= KEY_POWER) & (button->code >= KEY_VOLUMEDOWN))
+		 pr_info("gpio_keys: %s %s\n", state ? "Pressed" : "Released",
+			key_descriptions[button->code - KEY_VOLUMEDOWN]);
 
 	gpio_keys_gpio_report_event(bdata);
 }

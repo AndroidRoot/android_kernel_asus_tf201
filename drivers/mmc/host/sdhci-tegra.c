@@ -31,7 +31,13 @@
 #include <mach/sdhci.h>
 #include <mach/io_dpd.h>
 
+#include <linux/regulator/driver.h>
+
+#include <mach/board-cardhu-misc.h>
+#include <../gpio-names.h>
+
 #include "sdhci-pltfm.h"
+#include "../debug_mmc.h"
 
 #define SDHCI_VENDOR_CLOCK_CNTRL	0x100
 #define SDHCI_VENDOR_CLOCK_CNTRL_SDMMC_CLK	0x1
@@ -56,8 +62,8 @@
 #define SDMMC_AUTO_CAL_CONFIG_AUTO_CAL_PU_OFFSET	0x62
 
 #define SDHOST_1V8_OCR_MASK	0x8
-#define SDHOST_HIGH_VOLT_MIN	2700000
-#define SDHOST_HIGH_VOLT_MAX	3600000
+#define SDHOST_HIGH_VOLT_MIN	3300000
+#define SDHOST_HIGH_VOLT_MAX	3340000
 #define SDHOST_LOW_VOLT_MIN	1800000
 #define SDHOST_LOW_VOLT_MAX	1800000
 
@@ -97,29 +103,6 @@ static struct tegra_sdhci_hw_ops tegra_3x_sdhci_ops = {
 	.sdhost_init = tegra3_sdhci_post_reset_init,
 };
 #endif
-
-struct tegra_sdhci_host {
-	bool	clk_enabled;
-	struct regulator *vdd_io_reg;
-	struct regulator *vdd_slot_reg;
-	/* Pointer to the chip specific HW ops */
-	struct tegra_sdhci_hw_ops *hw_ops;
-	/* Host controller instance */
-	unsigned int instance;
-	/* vddio_min */
-	unsigned int vddio_min_uv;
-	/* vddio_max */
-	unsigned int vddio_max_uv;
-	/* max clk supported by the platform */
-	unsigned int max_clk_limit;
-	/* max ddr clk supported by the platform */
-	unsigned int ddr_clk_limit;
-	struct tegra_io_dpd *dpd;
-	bool card_present;
-	bool is_rail_enabled;
-	struct clk *emc_clk;
-	unsigned int emc_max_clk;
-};
 
 static u32 tegra_sdhci_readl(struct sdhci_host *host, int reg)
 {
@@ -314,6 +297,8 @@ static irqreturn_t carddetect_irq(int irq, void *data)
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
 	struct platform_device *pdev = to_platform_device(mmc_dev(sdhost->mmc));
 	struct tegra_sdhci_platform_data *plat;
+
+	MMC_printk("%s: gpio_%d:%d", mmc_hostname(sdhost->mmc), SD_CARD_DETECT, gpio_get_value(SD_CARD_DETECT));
 
 	plat = pdev->dev.platform_data;
 
@@ -521,6 +506,11 @@ static void tegra_sdhci_set_clock(struct sdhci_host *sdhci, unsigned int clock)
 		tegra_sdhci_set_clk_rate(sdhci, clock);
 		if (tegra_host->hw_ops->set_card_clock)
 			tegra_host->hw_ops->set_card_clock(sdhci, clock);
+
+		if(!strcmp(mmc_hostname(sdhci->mmc), "mmc1") && (clock >= 48000000)) {
+			printk( "%s clock request: %uKHz. currently %uKHz\n",
+				mmc_hostname(sdhci->mmc), clock/1000, sdhci->max_clk/1000);
+		}
 	} else if (!clock && tegra_host->clk_enabled) {
 		if (tegra_host->hw_ops->set_card_clock)
 			tegra_host->hw_ops->set_card_clock(sdhci, clock);
@@ -554,10 +544,6 @@ static int tegra_sdhci_signal_voltage_switch(struct sdhci_host *sdhci,
 		if (ctrl & SDHCI_CTRL_VDD_180)
 			ctrl &= ~SDHCI_CTRL_VDD_180;
 	}
-
-	/* Check if the slot can support the required voltage */
-	if (min_uV > tegra_host->vddio_max_uv)
-		return 0;
 
 	/* Switch OFF the card clock to prevent glitches on the clock line */
 	clk = sdhci_readw(sdhci, SDHCI_CLOCK_CONTROL);
@@ -851,20 +837,64 @@ static int tegra_sdhci_suspend(struct sdhci_host *sdhci, pm_message_t state)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	u32 project_info = tegra3_get_project_id();
+	int ret = 0;
 
 	tegra_sdhci_set_clock(sdhci, 0);
 
 	/* Disable the power rails if any */
-	if (tegra_host->card_present) {
-		if (tegra_host->is_rail_enabled) {
-			if (tegra_host->vdd_io_reg)
-				regulator_disable(tegra_host->vdd_io_reg);
-			if (tegra_host->vdd_slot_reg)
-				regulator_disable(tegra_host->vdd_slot_reg);
-			tegra_host->is_rail_enabled = 0;
+	if(!strcmp(mmc_hostname(sdhci->mmc), "mmc2")){
+		if (tegra_host->vdd_slot_reg)
+			MMC_printk("%s:vdd_slot_reg: use_count %d", mmc_hostname(sdhci->mmc), tegra_host->vdd_slot_reg->rdev->use_count);
+
+		if (tegra_host->vdd_io_reg)
+			MMC_printk("%s:vdd_io_reg: use_count %d", mmc_hostname(sdhci->mmc), tegra_host->vdd_io_reg->rdev->use_count);
+
+		if (tegra_host->vdd_slot_reg && tegra_host->vdd_slot_reg->rdev->use_count > 0)
+		{
+			ret = regulator_disable(tegra_host->vdd_slot_reg);
+			MMC_printk("%s: vdd_slot_reg ret %d", mmc_hostname(sdhci->mmc), ret);
+		}
+
+		if (tegra_host->vdd_io_reg && tegra_host->vdd_io_reg->rdev->use_count > 0)
+		{
+			ret = regulator_disable(tegra_host->vdd_io_reg);
+			MMC_printk("%s: vdd_io_reg ret %d", mmc_hostname(sdhci->mmc), ret);
+		}
+	}else{
+		if (tegra_host->card_present) {
+			if (tegra_host->is_rail_enabled) {
+				if (tegra_host->vdd_io_reg)
+					regulator_disable(tegra_host->vdd_io_reg);
+				if (tegra_host->vdd_slot_reg)
+					regulator_disable(tegra_host->vdd_slot_reg);
+				tegra_host->is_rail_enabled = 0;
+			}
 		}
 	}
 
+skip:
+	if((project_info == TEGRA3_PROJECT_TF300T || project_info == TEGRA3_PROJECT_TF300TL || project_info == TEGRA3_PROJECT_TF300TG) && !strcmp(mmc_hostname(sdhci->mmc), "mmc0")) {
+		MMC_printk("%s: pull up data pin", mmc_hostname(sdhci->mmc));
+
+                gpio_request(TEGRA_GPIO_PAA0, "PAA0");
+                gpio_request(TEGRA_GPIO_PAA1, "PAA1");
+                gpio_request(TEGRA_GPIO_PAA2, "PAA2");
+                gpio_request(TEGRA_GPIO_PAA3, "PAA3");
+                gpio_request(TEGRA_GPIO_PAA4, "PAA4");
+                gpio_request(TEGRA_GPIO_PAA5, "PAA5");
+                gpio_request(TEGRA_GPIO_PAA6, "PAA6");
+                gpio_request(TEGRA_GPIO_PAA7, "PAA7");
+
+                gpio_direction_output(TEGRA_GPIO_PAA0, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA1, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA2, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA3, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA4, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA5, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA6, 1);
+                gpio_direction_output(TEGRA_GPIO_PAA7, 1);
+	}
 	return 0;
 }
 
@@ -872,17 +902,50 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	u32 project_info = tegra3_get_project_id();
+	int ret = 0;
+
+	if((project_info == TEGRA3_PROJECT_TF300T || project_info == TEGRA3_PROJECT_TF300TL || project_info == TEGRA3_PROJECT_TF300TG) && !strcmp(mmc_hostname(sdhci->mmc), "mmc0")) {
+                MMC_printk("%s: disable data pin", mmc_hostname(sdhci->mmc));
+
+		gpio_free(TEGRA_GPIO_PAA0);
+		gpio_free(TEGRA_GPIO_PAA1);
+		gpio_free(TEGRA_GPIO_PAA2);
+                gpio_free(TEGRA_GPIO_PAA3);
+		gpio_free(TEGRA_GPIO_PAA4);
+                gpio_free(TEGRA_GPIO_PAA5);
+		gpio_free(TEGRA_GPIO_PAA6);
+                gpio_free(TEGRA_GPIO_PAA7);
+        }
 
 	/* Enable the power rails if any */
-	if (tegra_host->card_present) {
-		if (!tegra_host->is_rail_enabled) {
-			if (tegra_host->vdd_slot_reg)
-				regulator_enable(tegra_host->vdd_slot_reg);
-			if (tegra_host->vdd_io_reg) {
-				regulator_enable(tegra_host->vdd_io_reg);
-				tegra_sdhci_signal_voltage_switch(sdhci, MMC_SIGNAL_VOLTAGE_330);
+	if(!strcmp(mmc_hostname(sdhci->mmc), "mmc2")){
+		if (tegra_host->vdd_io_reg)
+			MMC_printk("%s:vdd_io_reg: use_count %d", mmc_hostname(sdhci->mmc), tegra_host->vdd_io_reg->rdev->use_count);
+
+		if (tegra_host->vdd_slot_reg)
+			MMC_printk("%s:vdd_slot_reg: use_count %d", mmc_hostname(sdhci->mmc), tegra_host->vdd_slot_reg->rdev->use_count);
+
+		MMC_printk("%s: gpio_%d:%d", mmc_hostname(sdhci->mmc), SD_CARD_DETECT, gpio_get_value(SD_CARD_DETECT));
+		if(gpio_get_value(SD_CARD_DETECT) == 0)
+		{
+			if (tegra_host->vdd_io_reg && tegra_host->vdd_io_reg->rdev->use_count == 0)
+				ret = regulator_enable(tegra_host->vdd_io_reg);
+			if (tegra_host->vdd_slot_reg && tegra_host->vdd_slot_reg->rdev->use_count == 0)
+				ret = regulator_enable(tegra_host->vdd_slot_reg);
+		}
+	}
+	else{
+		if (tegra_host->card_present) {
+			if (!tegra_host->is_rail_enabled) {
+				if (tegra_host->vdd_slot_reg)
+					regulator_enable(tegra_host->vdd_slot_reg);
+				if (tegra_host->vdd_io_reg) {
+					regulator_enable(tegra_host->vdd_io_reg);
+					tegra_sdhci_signal_voltage_switch(sdhci, MMC_SIGNAL_VOLTAGE_330);
+				}
+				tegra_host->is_rail_enabled = 1;
 			}
-			tegra_host->is_rail_enabled = 1;
 		}
 	}
 	/* Setting the min identification clock of freq 400KHz */
@@ -894,7 +957,6 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 		sdhci_writeb(sdhci, SDHCI_POWER_ON, SDHCI_POWER_CONTROL);
 		sdhci->pwr = 0;
 	}
-
 	return 0;
 }
 
@@ -1016,6 +1078,11 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		plat->mmc_data.register_status_notify(sdhci_status_notify_cb, host);
 	}
 
+	if (gpio_is_valid(plat->wow_gpio)) {
+		printk("%s: enable Wi-Fi wake event\n",mmc_hostname(host->mmc));
+		enable_irq_wake(gpio_to_irq(plat->wow_gpio));
+	}
+
 	if (plat->mmc_data.status) {
 		plat->mmc_data.card_present = plat->mmc_data.status(mmc_dev(host->mmc));
 	}
@@ -1038,7 +1105,8 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	if (!gpio_is_valid(plat->cd_gpio))
 		tegra_host->card_present = 1;
 
-	if (!plat->mmc_data.built_in) {
+	if (!plat->mmc_data.built_in && !strcmp(mmc_hostname(host->mmc), "mmc2")) {
+		MMC_printk("%s: non-built_in %d", mmc_hostname(host->mmc), plat->mmc_data.built_in);
 		if (plat->mmc_data.ocr_mask & SDHOST_1V8_OCR_MASK) {
 			tegra_host->vddio_min_uv = SDHOST_LOW_VOLT_MIN;
 			tegra_host->vddio_max_uv = SDHOST_LOW_VOLT_MAX;
@@ -1068,18 +1136,41 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 
 		tegra_host->vdd_slot_reg = regulator_get(mmc_dev(host->mmc), "vddio_sd_slot");
 		if (IS_ERR_OR_NULL(tegra_host->vdd_slot_reg)) {
-			dev_info(mmc_dev(host->mmc), "%s regulator not found: %ld."
-				" Assuming vddio_sd_slot is not required.\n",
-					"vddio_sd_slot", PTR_ERR(tegra_host->vdd_slot_reg));
+			dev_err(mmc_dev(host->mmc), "%s regulator not found: %ld\n",
+				"vddio_sd_slot", PTR_ERR(tegra_host->vdd_slot_reg));
 			tegra_host->vdd_slot_reg = NULL;
-		}
-
-		if (tegra_host->card_present) {
-			if (tegra_host->vdd_slot_reg)
+		} else {
+			rc = regulator_set_voltage(tegra_host->vdd_slot_reg,
+				2850000, 2890000);
+			if (rc) {
+				dev_err(mmc_dev(host->mmc), "%s regulator_set_voltage failed: %d",
+					"vddio_sd_slot", rc);
+			} else {
 				regulator_enable(tegra_host->vdd_slot_reg);
-			if (tegra_host->vdd_io_reg)
+			}
+		}
+		if (tegra_host->card_present) {
+                        if (tegra_host->vdd_slot_reg)
+                                regulator_enable(tegra_host->vdd_slot_reg);
+                        if (tegra_host->vdd_io_reg)
+                                regulator_enable(tegra_host->vdd_io_reg);
+                        tegra_host->is_rail_enabled = 1;
+                }
+	}
+	else if (!strcmp(mmc_hostname(host->mmc), "mmc0")) {
+		MMC_printk("%s: built_in %d", mmc_hostname(host->mmc), plat->mmc_data.built_in);
+		tegra_host->vdd_io_reg = regulator_get(mmc_dev(host->mmc), "vddio_sdmmc");
+		if (IS_ERR_OR_NULL(tegra_host->vdd_io_reg)) {
+			dev_err(mmc_dev(host->mmc), "%s regulator not found: %ld\n",
+				"vddio_sdmmc", PTR_ERR(tegra_host->vdd_io_reg));
+			tegra_host->vdd_io_reg = NULL;
+		}
+		else {
+			rc = regulator_set_voltage(tegra_host->vdd_io_reg, 2850000, 2890000);
+			if (rc)
+				dev_err(mmc_dev(host->mmc), "%s regulator_set_voltage failed: %d", "vddio_sdmmc", rc);
+			else
 				regulator_enable(tegra_host->vdd_io_reg);
-			tegra_host->is_rail_enabled = 1;
 		}
 	}
 

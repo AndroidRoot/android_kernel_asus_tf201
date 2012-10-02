@@ -843,7 +843,7 @@ static void mmc_sdio_remove(struct mmc_host *host)
 /*
  * Card detection callback from host.
  */
-static void mmc_sdio_detect(struct mmc_host *host)
+static int mmc_sdio_detect(struct mmc_host *host)
 {
 	int err;
 
@@ -889,6 +889,7 @@ out:
 		mmc_power_off(host);
 		mmc_release_host(host);
 	}
+	return err;
 }
 
 /*

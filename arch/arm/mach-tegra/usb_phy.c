@@ -85,6 +85,8 @@ static void print_usb_plat_data_info(struct tegra_usb_phy *phy)
 				"enabled" : "disabled");
 		pr_info("remote_wakeup: %s\n", pdata->u_data.host.remote_wakeup_supported
 				? "enabled" : "disabled");
+		pr_info("power_off_on_suspend: %s\n", pdata->u_data.host.power_off_on_suspend
+				? "enabled" : "disabled");
 	}
 }
 
@@ -413,8 +415,6 @@ void tegra_usb_phy_close(struct tegra_usb_phy *phy)
 	}
 
 	if (phy->vdd_reg) {
-		if (phy->vdd_reg_on)
-			regulator_disable(phy->vdd_reg);
 		regulator_put(phy->vdd_reg);
 	}
 
@@ -482,12 +482,17 @@ int tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 		}
 	}
 
-	if (phy->vdd_reg && phy->vdd_reg_on)
-		if (phy->pdata->has_hostpc ||
-			phy->pdata->builtin_host_disabled) {
+	if (phy->vdd_reg && phy->vdd_reg_on) {
+#ifndef CONFIG_ARCH_TEGRA_2x_SOC
+		regulator_disable(phy->vdd_reg);
+		phy->vdd_reg_on = false;
+#else
+		if (tegra_get_revision() >= TEGRA_REVISION_A03) {
 			regulator_disable(phy->vdd_reg);
 			phy->vdd_reg_on = false;
 		}
+#endif
+	}
 
 	phy->phy_power_on = false;
 

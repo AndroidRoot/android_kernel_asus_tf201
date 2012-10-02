@@ -39,13 +39,20 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include "mpu-dev.h"
+#include <asm/uaccess.h>
+#include <linux/fs.h>
 
 #include <log.h>
 #include <linux/mpu.h>
 #include "mlsl.h"
 #include "mldl_cfg.h"
+#include <linux/workqueue.h>
+
+struct delayed_work kxtf9_init_work;
+
 #undef MPL_LOG_TAG
 #define MPL_LOG_TAG "MPL-acc"
+#define KXF9_INIT_DELAY 200
 
 #define KXTF9_XOUT_HPF_L                (0x00)	/* 0000 0000 */
 #define KXTF9_XOUT_HPF_H                (0x01)	/* 0000 0001 */
@@ -92,6 +99,12 @@
 #define KXTF9_THS_COUNTS_P_G (32)
 
 /* -------------------------------------------------------------------------- */
+#define KXTF9_CALIBRATION_PATH "/data/sensors/KXTF9_Calibration.ini"
+
+static int kxtf9_mod_delay_init(void);
+bool flagLoadAccelConfig = false;
+EXPORT_SYMBOL(flagLoadAccelConfig);
+static int offset_x = 0, offset_y = 0, offset_z =0;
 
 struct kxtf9_config {
 	unsigned long odr;	/* Output data rate mHz */
@@ -111,6 +124,50 @@ struct kxtf9_private_data {
 	struct kxtf9_config suspend;
 	struct kxtf9_config resume;
 };
+
+static int access_calibration_file(void)
+{
+	char buf[256];
+	int ret = 0;
+	struct file *fp = NULL;
+	mm_segment_t oldfs;
+	int max_x = 0, max_y = 0, max_z = 0;
+	int min_x = 0, min_y = 0, min_z = 0;
+
+	oldfs=get_fs();
+	set_fs(get_ds());
+	memset(buf, 0, sizeof(u8)*256);
+
+	fp=filp_open(KXTF9_CALIBRATION_PATH, O_RDONLY, 0);
+	if (!IS_ERR(fp)) {
+		printk("kxtf9 open config file success\n");
+		ret = fp->f_op->read(fp, buf, sizeof(buf), &fp->f_pos);
+		printk("kxtf9 config content is :%s\n", buf);
+		sscanf(buf,"%6d %6d %6d %6d %6d %6d\n", &max_x, &min_x, &max_y,&min_y, &max_z, &min_z);
+
+		offset_x = min_x + (max_x - min_x)/2;
+		offset_y = min_y + (max_y - min_y)/2;
+		offset_z = min_z + (max_z - min_z)/2;
+
+		printk("kxtf9: offset: %d %d %d\n", offset_x, offset_y, offset_z);
+		filp_close(fp, NULL);
+		set_fs(oldfs);
+		return 0;
+	}
+	else{
+		offset_x = 0;
+		offset_y = 0;
+		offset_z = 0;
+		printk("No kxtf9 calibration file\n");
+		set_fs(oldfs);
+		return -1;
+	}
+
+}
+
+/*****************************************
+    Accelerometer Initialization Functions
+*****************************************/
 
 static int kxtf9_set_ths(void *mlsl_handle,
 			 struct ext_slave_platform_data *pdata,
@@ -314,7 +371,7 @@ static int kxtf9_suspend(void *mlsl_handle,
 	int result;
 	unsigned char data;
 	struct kxtf9_private_data *private_data = pdata->private_data;
-
+	printk("kxtf9: OFF +\n");
 	/* Wake up */
 	result = inv_serial_single_write(mlsl_handle, pdata->address,
 					 KXTF9_CTRL_REG1, 0x40);
@@ -369,7 +426,7 @@ static int kxtf9_suspend(void *mlsl_handle,
 		LOG_RESULT_LOCATION(result);
 		return result;
 	}
-
+	printk("kxtf9: OFF -\n");
 	return result;
 }
 
@@ -385,6 +442,7 @@ static int kxtf9_resume(void *mlsl_handle,
 	unsigned char data;
 	struct kxtf9_private_data *private_data = pdata->private_data;
 
+	printk("kxtf9: ON +\n");
 	/* Wake up */
 	result = inv_serial_single_write(mlsl_handle, pdata->address,
 					 KXTF9_CTRL_REG1, 0x40);
@@ -439,7 +497,7 @@ static int kxtf9_resume(void *mlsl_handle,
 		LOG_RESULT_LOCATION(result);
 		return result;
 	}
-
+	printk("kxtf9: ON -\n");
 	return INV_SUCCESS;
 }
 
@@ -447,7 +505,7 @@ static int kxtf9_init(void *mlsl_handle,
 		      struct ext_slave_descr *slave,
 		      struct ext_slave_platform_data *pdata)
 {
-
+	printk(KERN_INFO "%s+ #####\n", __func__);
 	struct kxtf9_private_data *private_data;
 	int result = INV_SUCCESS;
 
@@ -546,6 +604,7 @@ static int kxtf9_init(void *mlsl_handle,
 		LOG_RESULT_LOCATION(result);
 		return result;
 	}
+	printk(KERN_INFO "%s- #####\n", __func__);
 	return result;
 }
 
@@ -553,6 +612,7 @@ static int kxtf9_exit(void *mlsl_handle,
 		      struct ext_slave_descr *slave,
 		      struct ext_slave_platform_data *pdata)
 {
+	printk("%s_shutdown+\n",__FUNCTION__);
 	kfree(pdata->private_data);
 	return INV_SUCCESS;
 }
@@ -678,6 +738,12 @@ static int kxtf9_read(void *mlsl_handle,
 {
 	int result;
 	unsigned char reg;
+	int x, y, z;
+
+	if(!flagLoadAccelConfig){
+		access_calibration_file();
+		flagLoadAccelConfig = true;
+	}
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 KXTF9_INT_SRC_REG2, 1, &reg);
 	if (result) {
@@ -690,6 +756,27 @@ static int kxtf9_read(void *mlsl_handle,
 
 	result = inv_serial_read(mlsl_handle, pdata->address,
 				 slave->read_reg, slave->read_len, data);
+	x = ((data[1] << 4) | (data[0] >> 4));
+	y = ((data[3] << 4) | (data[2] >> 4));
+	z = ((data[5] << 4) | (data[4] >> 4));
+
+	if (x & 0x800)
+		x |= 0xFFFFF000;
+	if (y & 0x800)
+		y |= 0xFFFFF000;
+	if (z & 0x800)
+		z |= 0xFFFFF000;
+
+//	x -= offset_x;
+//	y -= offset_y;
+//	z -= offset_z;
+
+	data[0] = (x << 4) & 0x000000F0;
+	data[1] = (x >> 4) & 0x000000FF;
+	data[2] = (y << 4) & 0x000000F0;
+	data[3] = (y >> 4) & 0x000000FF;
+	data[4] = (z << 4) & 0x000000F0;
+	data[5] = (z >> 4) & 0x000000FF;
 	if (result) {
 		LOG_RESULT_LOCATION(result);
 		return result;
@@ -815,6 +902,16 @@ static struct i2c_driver kxtf9_mod_driver = {
 
 static int __init kxtf9_mod_init(void)
 {
+	printk(KERN_INFO "%s+ #####\n", __func__);
+	INIT_DELAYED_WORK(&kxtf9_init_work, kxtf9_mod_delay_init);
+	schedule_delayed_work(&kxtf9_init_work, KXF9_INIT_DELAY);
+	printk(KERN_INFO "%s- #####\n", __func__);
+}
+
+static int kxtf9_mod_delay_init(void)
+{
+	printk(KERN_INFO "%s+ #####\n", __func__);
+
 	int res = i2c_add_driver(&kxtf9_mod_driver);
 	pr_info("%s: Probe name %s\n", __func__, "kxtf9_mod");
 	if (res)

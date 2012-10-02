@@ -519,6 +519,9 @@ static int tegra_otg_suspend(struct device *dev)
 	otg_writel(tegra, val, USB_PHY_WAKEUP);
 	clk_disable(tegra->clk);
 
+	tegra->suspended = true;
+	return 0;
+
 	/* Suspend peripheral mode, host mode is taken care by host driver */
 	if (otg->state == OTG_STATE_B_PERIPHERAL)
 		tegra_change_otg_state(tegra, OTG_STATE_A_SUSPEND);

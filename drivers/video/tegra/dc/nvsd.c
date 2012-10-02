@@ -25,6 +25,7 @@
 #include "dc_reg.h"
 #include "dc_priv.h"
 #include "nvsd.h"
+#include <mach/board-cardhu-misc.h>
 
 /* Elements for sysfs access */
 #define NVSD_ATTR(__name) static struct kobj_attribute nvsd_attr_##__name = \
@@ -350,6 +351,10 @@ void nvsd_init(struct tegra_dc *dc, struct tegra_dc_sd_settings *settings)
 	u32 val = 0;
 	u32 bw_idx = 0;
 	/* TODO: check if HW says SD's available */
+
+	// disable DIDIM in P1801 since backlight control is not ready
+	if ( settings && tegra3_get_project_id() == TEGRA3_PROJECT_P1801)
+		settings->enable = 0;
 
 	/* If SD's not present or disabled, clear the register and return. */
 	if (!settings || settings->enable == 0) {
@@ -809,9 +814,12 @@ static ssize_t nvsd_settings_store(struct kobject *kobj,
 				mutex_unlock(&dc->lock);
 				return -ENODEV;
 			}
-			mutex_unlock(&dc->lock);
 
+			tegra_dc_hold_dc_out(dc);
 			nvsd_init(dc, sd_settings);
+			tegra_dc_release_dc_out(dc);
+
+			mutex_unlock(&dc->lock);
 
 			/* Update backlight state IFF we're disabling! */
 			if (!sd_settings->enable && sd_settings->bl_device) {

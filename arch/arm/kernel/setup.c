@@ -489,6 +489,31 @@ int __init arm_add_memory(phys_addr_t start, unsigned long size)
 }
 
 /*
+ * In factory test mode, factory_mode is set as 2.
+ * In normal mode, factory_mode remains 0.
+ */
+
+unsigned int factory_mode = 0;
+EXPORT_SYMBOL(factory_mode);
+static int __init check_factory_mode(char *p)
+{
+	char str[]="factory2";
+	char *s1 = str;
+	char *s2 = p;
+
+	for (; (*s1 == *s2) && (*s1 != NULL); ++s1, ++s2);
+
+	if (*s1 == 0){
+		factory_mode = 2;
+	}
+
+	printk("factory_mode = %d\n", factory_mode);
+	return 0;
+}
+early_param("androidboot.mode", check_factory_mode);
+
+
+/*
  * Pick out the memory size.  We look for mem=size@start,
  * where start and size are "size[KkMm]"
  */

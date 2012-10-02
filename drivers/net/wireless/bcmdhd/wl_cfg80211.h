@@ -64,8 +64,8 @@ struct wl_ibss;
 #define	WL_ERR(args)									\
 do {										\
 	if (wl_dbg_level & WL_DBG_ERR) {				\
-			printk(KERN_ERR "CFG80211-ERROR) %s : ", __func__);	\
-			printk args;						\
+			printf(KERN_ERR "CFG80211-ERROR) %s : ", __func__);	\
+			printf args;						\
 		} 								\
 } while (0)
 #ifdef WL_INFO
@@ -74,8 +74,8 @@ do {										\
 #define	WL_INFO(args)									\
 do {										\
 	if (wl_dbg_level & WL_DBG_INFO) {				\
-			printk(KERN_ERR "CFG80211-INFO) %s : ", __func__);	\
-			printk args;						\
+			printf(KERN_ERR "CFG80211-INFO) %s : ", __func__);	\
+			printf args;						\
 		}								\
 } while (0)
 #ifdef WL_SCAN
@@ -84,8 +84,8 @@ do {										\
 #define	WL_SCAN(args)								\
 do {									\
 	if (wl_dbg_level & WL_DBG_SCAN) {			\
-		printk(KERN_ERR "CFG80211-SCAN) %s :", __func__);	\
-		printk args;							\
+		printf(KERN_ERR "CFG80211-SCAN) %s :", __func__);	\
+		printf args;							\
 	}									\
 } while (0)
 #ifdef WL_TRACE
@@ -94,16 +94,16 @@ do {									\
 #define	WL_TRACE(args)								\
 do {									\
 	if (wl_dbg_level & WL_DBG_TRACE) {			\
-		printk(KERN_ERR "CFG80211-TRACE) %s :", __func__);	\
-		printk args;							\
+		printf(KERN_ERR "CFG80211-TRACE) %s :", __func__);	\
+		printf args;							\
 	}									\
 } while (0)
 #if (WL_DBG_LEVEL > 0)
 #define	WL_DBG(args)								\
 do {									\
 	if (wl_dbg_level & WL_DBG_DBG) {			\
-		printk(KERN_ERR "CFG80211-DEBUG) %s :", __func__);	\
-		printk args;							\
+		printf(KERN_ERR "CFG80211-DEBUG) %s :", __func__);	\
+		printf args;							\
 	}									\
 } while (0)
 #else				/* !(WL_DBG_LEVEL > 0) */
@@ -135,6 +135,12 @@ do {									\
 #define WL_ACT_FRAME_RETRY 4
 
 #define WL_INVALID 		-1
+
+
+/* Bring down SCB Timeout to 20secs from 60secs default */
+#ifndef WL_SCB_TIMEOUT
+#define WL_SCB_TIMEOUT 20
+#endif
 
 /* driver status */
 enum wl_status {
@@ -450,6 +456,7 @@ struct wl_priv {
 	bool sched_scan_running;	/* scheduled scan req status */
 	u16 hostapd_chan;            /* remember chan requested by framework for hostapd  */
 	u16 deauth_reason;           /* Place holder to save deauth/disassoc reasons */
+	u16 scan_busy_count;
 };
 
 static inline struct wl_bss_info *next_bss(struct wl_scan_results *list, struct wl_bss_info *bss)
@@ -662,5 +669,6 @@ extern int wl_cfg80211_hang(struct net_device *dev, u16 reason);
 extern s32 wl_mode_to_nl80211_iftype(s32 mode);
 int wl_cfg80211_do_driver_init(struct net_device *net);
 void wl_cfg80211_enable_trace(int level);
+extern s32 wl_update_wiphybands(struct wl_priv *wl);
 extern s32 wl_cfg80211_if_is_group_owner(void);
 #endif				/* _wl_cfg80211_h_ */

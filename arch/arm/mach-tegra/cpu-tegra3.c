@@ -54,6 +54,10 @@ module_param(no_lp, bool, 0644);
 static unsigned long up2gn_delay;
 static unsigned long up2g0_delay;
 static unsigned long down_delay;
+void set_up2g0_delay(int delay)
+{
+	up2g0_delay = msecs_to_jiffies(delay?UP2G0_DELAY_MS:0);
+}
 module_param(up2gn_delay, ulong, 0644);
 module_param(up2g0_delay, ulong, 0644);
 module_param(down_delay, ulong, 0644);
@@ -149,12 +153,9 @@ static int hp_state_set(const char *arg, const struct kernel_param *kp)
 
 	if (ret == 0) {
 		if ((hp_state == TEGRA_HP_DISABLED) &&
-		    (old_state != TEGRA_HP_DISABLED)) {
-			mutex_unlock(tegra3_cpu_lock);
-			cancel_delayed_work_sync(&hotplug_work);
-			mutex_lock(tegra3_cpu_lock);
+		    (old_state != TEGRA_HP_DISABLED))
 			pr_info("Tegra auto-hotplug disabled\n");
-		} else if (hp_state != TEGRA_HP_DISABLED) {
+		else if (hp_state != TEGRA_HP_DISABLED) {
 			if (old_state == TEGRA_HP_DISABLED) {
 				pr_info("Tegra auto-hotplug enabled\n");
 				hp_init_stats();
@@ -318,11 +319,20 @@ static void tegra_auto_hotplug_work_func(struct work_struct *work)
 	}
 	mutex_unlock(tegra3_cpu_lock);
 
-	if (cpu < nr_cpu_ids) {
-		if (up)
+	/* Ignore hotplug during shutdown. This prevents us doing
+	* work that can fail.
+	*/
+	if (system_state <= SYSTEM_RUNNING && cpu < nr_cpu_ids) {
+		if (up){
+			printk(KERN_INFO "cpu_up(%u)+\n",cpu);
 			cpu_up(cpu);
-		else
+			printk(KERN_INFO "cpu_up(%u)-\n",cpu);
+		}
+		else{
+			printk(KERN_INFO "cpu_down(%u)+\n",cpu);
 			cpu_down(cpu);
+			printk(KERN_INFO "cpu_down(%u)-\n",cpu);
+		}
 	}
 }
 

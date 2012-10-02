@@ -153,8 +153,9 @@ config MACH_ARUBA
 config MACH_CARDHU
        bool "Cardhu board"
        depends on ARCH_TEGRA_3x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5631 if SND_SOC
        select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
-       select MACH_HAS_SND_SOC_TEGRA_TLV320AIC326X if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5642 if SND_SOC
        select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
        help
          Support for NVIDIA Cardhu development platform
@@ -296,7 +297,7 @@ config TEGRA_CORE_DVFS
 
 config TEGRA_IOVMM_GART
 	bool "Enable I/O virtual memory manager for GART"
-	depends on ARCH_TEGRA_2x_SOC && !TEGRA_IOMMU_GART
+	depends on ARCH_TEGRA_2x_SOC
 	default y
 	select TEGRA_IOVMM
 	help
@@ -307,7 +308,7 @@ config TEGRA_IOVMM_GART
 
 config TEGRA_IOVMM_SMMU
 	bool "Enable I/O virtual memory manager for SMMU"
-	depends on ARCH_TEGRA_3x_SOC && !TEGRA_IOMMU_SMMU
+	depends on ARCH_TEGRA_3x_SOC
 	default y
 	select TEGRA_IOVMM
 	help
@@ -324,7 +325,6 @@ config TEGRA_IOVMM_SMMU_SYSFS
 	  Enables SMMU register access through /sys/devices/smmu/* files.
 
 config TEGRA_IOVMM
-	depends on TEGRA_IOVMM_GART || TEGRA_IOVMM_SMMU
 	bool
 
 config TEGRA_AVP_KERNEL_ON_MMU
@@ -336,7 +336,7 @@ config TEGRA_AVP_KERNEL_ON_MMU
 
 config TEGRA_AVP_KERNEL_ON_SMMU
 	bool "Use SMMU to relocate AVP kernel"
-	depends on TEGRA_IOVMM_SMMU || TEGRA_IOMMU_SMMU
+	depends on TEGRA_IOVMM_SMMU
 	default y
 	help
 	  Use SMMU to relocate AVP kernel (nvrm_avp.bin).
@@ -353,6 +353,10 @@ config TEGRA_THERMAL_THROTTLE
 	help
 	  Also requires enabling a temperature sensor such as NCT1008.
 
+config DEBUG_ASUS
+	bool "For ASUS user-debug build"
+	help
+	  Say Y here for user-debug build.
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
 	help

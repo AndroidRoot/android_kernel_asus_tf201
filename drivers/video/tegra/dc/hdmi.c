@@ -48,6 +48,7 @@
 #include "hdmi.h"
 #include "edid.h"
 #include "nvhdcp.h"
+#include <mach/board-cardhu-misc.h>
 
 /* datasheet claims this will always be 216MHz */
 #define HDMI_AUDIOCLK_FREQ		216000000
@@ -623,6 +624,21 @@ const struct fb_videomode tegra_dc_hdmi_supported_cvt_modes[] = {
 		.vmode =	FB_VMODE_NONINTERLACED,
 		.sync = FB_SYNC_VERT_HIGH_ACT,
 	},
+	/* 1280x720p 60hz */
+	{
+		.refresh =		60,
+		.xres =			1280,
+		.yres =			720,
+		.pixclock =		KHZ2PICOS(74250),
+		.hsync_len =		40,		/* h_sync_width */
+		.vsync_len =		5,		/* v_sync_width */
+		.left_margin =		220,		/* h_back_porch */
+		.upper_margin =	20,		/* v_back_porch */
+		.right_margin =	110,		/* h_front_porch */
+		.lower_margin =	5,		/* v_front_porch */
+		.vmode =	 FB_VMODE_NONINTERLACED,
+		.sync = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	},
 	/* 1280x800p 60hz */
 	{
 		.refresh =	60,
@@ -805,6 +821,15 @@ const struct tdms_config tdms_config[] = {
 	.pll0 = SOR_PLL_BG_V17_S(3) | SOR_PLL_ICHPMP(1) | SOR_PLL_RESISTORSEL |
 		SOR_PLL_VCOCAP(3) | SOR_PLL_TX_REG_LOAD(0),
 	.pll1 = SOR_PLL_TMDS_TERM_ENABLE | SOR_PLL_PE_EN,
+	.pe_current = PE_CURRENT0(0xf) |
+			PE_CURRENT1(0xf) |
+			PE_CURRENT2(0xf) |
+			PE_CURRENT3(0xf),
+	.drive_current = DRIVE_CURRENT_LANE0(0x0f) |
+			DRIVE_CURRENT_LANE1(0x0f) |
+			DRIVE_CURRENT_LANE2(0x0f) |
+			DRIVE_CURRENT_LANE3(0x0f),
+	/*
 	.pe_current = PE_CURRENT0(PE_CURRENT_5_0_mA) |
 		PE_CURRENT1(PE_CURRENT_5_0_mA) |
 		PE_CURRENT2(PE_CURRENT_5_0_mA) |
@@ -813,6 +838,8 @@ const struct tdms_config tdms_config[] = {
 		DRIVE_CURRENT_LANE1(DRIVE_CURRENT_5_250_mA) |
 		DRIVE_CURRENT_LANE2(DRIVE_CURRENT_5_250_mA) |
 		DRIVE_CURRENT_LANE3(DRIVE_CURRENT_5_250_mA),
+	*/
+
 	},
 };
 #else /*  CONFIG_ARCH_TEGRA_2x_SOC */
@@ -1282,6 +1309,15 @@ static bool tegra_dc_hdmi_valid_asp_ratio(const struct tegra_dc *dc,
 static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
 					struct fb_videomode *mode)
 {
+	#if 0
+	printk("fb_videomode mode, xres=%d, yres=%d, pixclock=%d, vmode=%d\n",
+		mode->xres, mode->yres, mode->pixclock, mode->vmode);
+	printk("left_margin=%d, right_margin=%d, upper_margin=%d, lower_margin=%d\n",
+		mode->left_margin, mode->right_margin, mode->upper_margin, mode->lower_margin);
+	printk("hsync_len=%d, vsync_len=%d, refresh=%d\n",
+		mode->hsync_len, mode->vsync_len, mode->refresh);
+	#endif
+
 	if (mode->vmode & FB_VMODE_INTERLACED)
 		return false;
 
@@ -1300,6 +1336,10 @@ static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
 
 	/* Check if the mode's aspect ratio is supported */
 	if (!tegra_dc_hdmi_valid_asp_ratio(dc, mode))
+		return false;
+
+	// since P1801 main display is HDMI, the resolution should fix to 1080p
+	if( tegra3_get_project_id()==TEGRA3_PROJECT_P1801 && (mode->xres < 1920 || mode->yres < 1080))
 		return false;
 
 	/* Check some of DC's constraints */
@@ -1348,7 +1388,14 @@ void tegra_dc_hdmi_detect_config(struct tegra_dc *dc,
 	tegra_fb_update_monspecs(dc->fb, specs, tegra_dc_hdmi_mode_filter);
 #ifdef CONFIG_SWITCH
 	hdmi->hpd_switch.state = 0;
-	switch_set_state(&hdmi->hpd_switch, 1);
+	if ( tegra3_get_project_id()==TEGRA3_PROJECT_P1801 )
+		switch_set_state(&hdmi->hpd_switch, 0);	// do not tell userspace there is an HDMI plugged in
+	else{
+		if (hdmi->dvi)
+			switch_set_state(&hdmi->hpd_switch, 2);
+		else
+			switch_set_state(&hdmi->hpd_switch, 1);
+	}
 #endif
 	dev_info(&dc->ndev->dev, "display detected\n");
 
@@ -2249,9 +2296,12 @@ static void tegra_dc_hdmi_enable(struct tegra_dc *dc)
 	/* program HDMI registers and SOR sequencer */
 
 	tegra_dc_writel(dc, VSYNC_H_POSITION(1), DC_DISP_DISP_TIMING_OPTIONS);
-	tegra_dc_writel(dc, DITHER_CONTROL_DISABLE | BASE_COLOR_SIZE888,
+	if (tegra3_get_project_id() == TEGRA3_PROJECT_P1801)
+		tegra_dc_writel(dc, DITHER_CONTROL_ORDERED | BASE_COLOR_SIZE666,
 			DC_DISP_DISP_COLOR_CONTROL);
-
+	else
+		tegra_dc_writel(dc, DITHER_CONTROL_DISABLE | BASE_COLOR_SIZE888,
+			DC_DISP_DISP_COLOR_CONTROL);
 	/* video_preamble uses h_pulse2 */
 	pulse_start = dc->mode.h_ref_to_sync + dc->mode.h_sync_width +
 		dc->mode.h_back_porch - 10;

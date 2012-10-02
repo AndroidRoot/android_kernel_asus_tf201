@@ -533,6 +533,13 @@ void baseband_xmm_set_power_status(unsigned int status)
 }
 EXPORT_SYMBOL_GPL(baseband_xmm_set_power_status);
 
+void baseband_xmm_ap_resume_work(void)
+{
+	pr_debug("%s: AP resume\n",__func__);
+	queue_work(workqueue, &L2_resume_work);
+}
+EXPORT_SYMBOL( baseband_xmm_ap_resume_work);
+
 irqreturn_t xmm_power_ipc_ap_wake_irq(int irq, void *dev_id)
 {
 	struct baseband_power_platform_data *data = xmm_power_drv_data.pdata;

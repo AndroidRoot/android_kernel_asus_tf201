@@ -30,6 +30,7 @@
 
 #include "pm-irq.h"
 #include "wakeups.h"
+#include "wakeups-t3.h"
 
 #define PMC_CTRL		0x0
 #define PMC_CTRL_LATCH_WAKEUPS	(1 << 5)
@@ -235,6 +236,8 @@ static void tegra_pm_irq_syscore_resume_helper(
 	}
 }
 
+bool tegra_wakeup_sdcard_event = 0;
+EXPORT_SYMBOL(tegra_wakeup_sdcard_event);
 static void tegra_pm_irq_syscore_resume(void)
 {
 	unsigned long long wake_status = read_pmc_wake_status();
@@ -246,6 +249,12 @@ static void tegra_pm_irq_syscore_resume(void)
 	tegra_pm_irq_syscore_resume_helper(
 		(unsigned long)(wake_status >> 32), 1);
 #endif
+
+	if (wake_status & TEGRA_WAKE_GPIO_PI5)
+		tegra_wakeup_sdcard_event = 1;
+	else
+		tegra_wakeup_sdcard_event = 0;
+
 }
 
 /* set up lp0 wake sources */

@@ -4267,6 +4267,10 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		show_regs(regs);
 	else
 		dump_stack();
+#ifdef CONFIG_DEBUG_ASUS
+	//Force system hang for debugging under SMP
+	BUG_ON(1);
+#endif
 }
 
 /*
@@ -6289,6 +6293,12 @@ static void migrate_tasks(unsigned int dead_cpu)
 	 * done here.
 	 */
 	rq->stop = NULL;
+
+	/*
+	 * Ensure rt_rq is not throttled so its threads can be migrated using
+	 * pick_next_task_rt
+	 */
+	rq->rt.rt_throttled = 0;
 
 	for ( ; ; ) {
 		/*

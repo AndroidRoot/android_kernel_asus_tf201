@@ -1,6 +1,5 @@
 GCOV_PROFILE := y
 
-subdir-ccflags-y := -Werror
 
 obj-y                                   += ahb.o
 obj-y                                   += apbio.o
@@ -172,6 +171,8 @@ obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sdhci.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sensors.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-memory.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-powermon.o
+obj-${CONFIG_MACH_CARDHU}               += board-cardhu-misc.o
+obj-${CONFIG_MACH_CARDHU}               += vibrator.o
 
 obj-${CONFIG_MACH_KAI}                  += board-touch-kai-synaptics-spi.o
 obj-y                                   += board-touch-raydium_spi.o

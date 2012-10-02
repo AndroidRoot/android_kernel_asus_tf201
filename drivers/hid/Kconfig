@@ -614,6 +614,12 @@ config HID_ZYDACRON
 	---help---
 	Support for Zydacron remote control.
 
+config HID_SIS
+	tristate "SiS Touch Device"
+	depends on USB_HID
+	---help---
+	Support for SiS Touch devices that are fully compliant with HID standard.
+
 endmenu
 
 endif # HID_SUPPORT

@@ -29,6 +29,8 @@
 
 #include "sdhci.h"
 
+#include "../debug_mmc.h"
+
 #define DRIVER_NAME "sdhci"
 
 #define DBG(f, x...) \
@@ -2243,6 +2245,7 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 		mmc_hostname(host->mmc), intmask);
 
 	if (intmask & (SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE)) {
+		MMC_printk("%s: intmask 0x%08x SDHCI_INT_STATUS 0x%08x", mmc_hostname(host->mmc), intmask, sdhci_readl(host, SDHCI_INT_STATUS));
 		u32 present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
 			      SDHCI_CARD_PRESENT;
 
@@ -2264,7 +2267,8 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 		sdhci_writel(host, intmask & (SDHCI_INT_CARD_INSERT |
 			     SDHCI_INT_CARD_REMOVE), SDHCI_INT_STATUS);
 		intmask &= ~(SDHCI_INT_CARD_INSERT | SDHCI_INT_CARD_REMOVE);
-		tasklet_schedule(&host->card_tasklet);
+		if (strcmp(mmc_hostname(host->mmc), "mmc2"))
+			tasklet_schedule(&host->card_tasklet);
 	}
 
 	if (intmask & SDHCI_INT_CMD_MASK) {
@@ -2365,11 +2369,24 @@ int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 
 	sdhci_mask_irqs(host, SDHCI_INT_ALL_MASK);
 
-	if (host->vmmc)
+	if (host->vmmc) {
 		ret = regulator_disable(host->vmmc);
+		if (ret)
+			pr_err("%s: failed to disable regulator\n", __func__);
+	}
 
 	if (host->irq)
 		disable_irq(host->irq);
+
+	return 0;
+
+err_suspend_host:
+	/* Set the re-tuning expiration flag */
+	if ((host->version >= SDHCI_SPEC_300) && host->tuning_count &&
+	    (host->tuning_mode == SDHCI_TUNING_MODE_1))
+		host->flags |= SDHCI_NEEDS_RETUNING;
+
+	sdhci_enable_card_detection(host);
 
 	return ret;
 }

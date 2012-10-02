@@ -37,6 +37,8 @@
 #include <mach/irqs.h>
 #include <mach/pinmux.h>
 #include <mach/edp.h>
+#include <mach/board-cardhu-misc.h>
+
 
 #include "gpio-names.h"
 #include "board.h"
@@ -79,7 +81,6 @@ static struct regulator_consumer_supply tps6591x_vio_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_usb_pll", NULL),
 	REGULATOR_SUPPLY("avdd_osc", NULL),
 	REGULATOR_SUPPLY("vddio_sys", NULL),
-	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
 	REGULATOR_SUPPLY("pwrdet_sdmmc4", NULL),
 	REGULATOR_SUPPLY("vdd1v8_satelite", NULL),
 	REGULATOR_SUPPLY("vddio_uart", NULL),
@@ -99,7 +100,6 @@ static struct regulator_consumer_supply tps6591x_vio_supply_0[] = {
 	REGULATOR_SUPPLY("ldo8", NULL),
 	REGULATOR_SUPPLY("vcore_audio", NULL),
 	REGULATOR_SUPPLY("avcore_audio", NULL),
-	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.2"),
 	REGULATOR_SUPPLY("pwrdet_sdmmc3", NULL),
 	REGULATOR_SUPPLY("vcore1_lpddr2", NULL),
 	REGULATOR_SUPPLY("vcom_1v8", NULL),
@@ -113,6 +113,7 @@ static struct regulator_consumer_supply tps6591x_ldo1_supply_0[] = {
 	REGULATOR_SUPPLY("avdd_pex_pll", NULL),
 	REGULATOR_SUPPLY("avdd_pexa", NULL),
 	REGULATOR_SUPPLY("vdd_pexa", NULL),
+	REGULATOR_SUPPLY("vddio_sdmmc", "sdhci-tegra.3"),
 };
 
 static struct regulator_consumer_supply tps6591x_ldo2_supply_0[] = {
@@ -120,6 +121,7 @@ static struct regulator_consumer_supply tps6591x_ldo2_supply_0[] = {
 	REGULATOR_SUPPLY("vdd_sata", NULL),
 	REGULATOR_SUPPLY("avdd_sata_pll", NULL),
 	REGULATOR_SUPPLY("avdd_plle", NULL),
+	REGULATOR_SUPPLY("vddio_sd_slot", "sdhci-tegra.0"),
 };
 
 static struct regulator_consumer_supply tps6591x_ldo3_supply_e118x[] = {
@@ -192,12 +194,12 @@ static struct regulator_consumer_supply tps6591x_ldo8_supply_0[] = {
 
 TPS_PDATA_INIT(vdd1, skubit0_0, 600,  1500, 0, 1, 1, 0, -1, 0, 0, EXT_CTRL_SLEEP_OFF, 0);
 TPS_PDATA_INIT(vdd1, skubit0_1, 600,  1500, 0, 1, 1, 0, -1, 0, 0, EXT_CTRL_SLEEP_OFF, 0);
-TPS_PDATA_INIT(vdd2, 0,         600,  1500, 0, 0, 1, 0, -1, 0, 0, 0, 0);
+TPS_PDATA_INIT(vdd2, 0,         600,  1500, 0, 1, 1, 0, -1, 0, 0, 0, 0);
 TPS_PDATA_INIT(vddctrl, 0,      600,  1400, 0, 1, 1, 0, -1, 0, 0, EXT_CTRL_EN1, 0);
 TPS_PDATA_INIT(vio,  0,         1500, 3300, 0, 1, 1, 0, -1, 0, 0, 0, 0);
 
-TPS_PDATA_INIT(ldo1, 0,         1000, 3300, tps6591x_rails(VDD_2), 0, 0, 0, -1, 0, 1, 0, 0);
-TPS_PDATA_INIT(ldo2, 0,         1050, 1050, tps6591x_rails(VDD_2), 0, 0, 1, -1, 0, 1, 0, 0);
+TPS_PDATA_INIT(ldo1, 0,         1000, 3300, tps6591x_rails(VDD_2), 1, 0, 0, -1, 0, 1, 0, 0);
+TPS_PDATA_INIT(ldo2, 0,         1050, 3300, tps6591x_rails(VDD_2), 0, 0, 1, -1, 0, 1, 0, 0);
 
 TPS_PDATA_INIT(ldo3, e118x,     1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0);
 TPS_PDATA_INIT(ldo3, e1198,     1000, 3300, 0, 0, 0, 0, -1, 0, 0, 0, 0);
@@ -389,6 +391,7 @@ int __init cardhu_regulator_init(void)
 
 	tegra_get_board_info(&board_info);
 	tegra_get_pmu_board_info(&pmu_board_info);
+	pmu_board_info.sku=1;
 
 	if (pmu_board_info.board_id == BOARD_PMU_PM298)
 		return cardhu_pm298_regulator_init();
@@ -484,11 +487,17 @@ int __init cardhu_regulator_init(void)
 		}
 	}
 
-	/* E1291-A04/A05: Enable DEV_SLP and enable sleep on GPIO2 */
-	if ((board_info.board_id == BOARD_E1291) &&
+	/*
+	 *E1291-A04/A05/A07 or PM269-alike:
+	 *	Enable DEV_SLP and enable sleep on GPIO2
+	 */
+	if ((board_info.board_id == BOARD_PM269) ||
+		((board_info.board_id == BOARD_E1291) &&
 			((board_info.fab == BOARD_FAB_A04) ||
 			 (board_info.fab == BOARD_FAB_A05) ||
-			 (board_info.fab == BOARD_FAB_A07))) {
+			 (board_info.fab == BOARD_FAB_A07)))) {
+		pr_info("TPS6591x GPIO2 was reprogrammed to follow state of "
+			"SLEEP input\n");
 		tps_platform.dev_slp_en = true;
 		tps_platform.gpio_init_data = tps_gpio_pdata_e1291_a04;
 		tps_platform.num_gpioinit_data =
@@ -625,11 +634,6 @@ static struct regulator_consumer_supply fixed_reg_en_vdd_com_supply[] = {
 	REGULATOR_SUPPLY("vdd_com_bd", NULL),
 };
 
-/* EN_VDD_SDMMC1 from AP GPIO VI_HSYNC D07*/
-static struct regulator_consumer_supply fixed_reg_en_vdd_sdmmc1_supply[] = {
-	REGULATOR_SUPPLY("vddio_sd_slot", "sdhci-tegra.0"),
-};
-
 /* EN_3V3_EMMC from AP GPIO SDMMC3_DAT4 D01*/
 static struct regulator_consumer_supply fixed_reg_en_3v3_emmc_supply[] = {
 	REGULATOR_SUPPLY("vdd_emmc_core", NULL),
@@ -733,7 +737,6 @@ FIXED_REG(7, cam3_ldo_en,	cam3_ldo_en,	FIXED_SUPPLY(en_3v3_sys),	0,      0,     
 FIXED_REG(8, en_vdd_com,	en_vdd_com,	FIXED_SUPPLY(en_3v3_sys),	1,      0,      TEGRA_GPIO_PD0,		true,	1, 3300);
 FIXED_REG(9, en_3v3_fuse,	en_3v3_fuse,	FIXED_SUPPLY(en_3v3_sys), 	0,      0,      TEGRA_GPIO_PL6,		true,	0, 3300);
 FIXED_REG(10, en_3v3_emmc,	en_3v3_emmc,	FIXED_SUPPLY(en_3v3_sys), 	1,      0,      TEGRA_GPIO_PD1,		true,	1, 3300);
-FIXED_REG(11, en_vdd_sdmmc1,	en_vdd_sdmmc1,	FIXED_SUPPLY(en_3v3_sys), 	0,      0,      TEGRA_GPIO_PD7,		true,	1, 3300);
 FIXED_REG(12, en_3v3_pex_hvdd,	en_3v3_pex_hvdd, FIXED_SUPPLY(en_3v3_sys),	0,      0,      TEGRA_GPIO_PL7,		true,	0, 3300);
 FIXED_REG(13, en_1v8_cam,	en_1v8_cam,	tps6591x_rails(VIO),		0,      0,      TEGRA_GPIO_PBB4,	true,	0, 1800);
 
@@ -749,7 +752,7 @@ FIXED_REG(3, en_3v3_sys_a04,	en_3v3_sys,	NULL,				0,      0,      TPS6591X_GPIO_
 FIXED_REG(4, en_vdd_bl_pm269,		en_vdd_bl,		NULL, 				0,      0,      TEGRA_GPIO_PH3,	true,	1, 5000);
 FIXED_REG(6, en_vdd_pnl1_pm269,		en_vdd_pnl1,		FIXED_SUPPLY(en_3v3_sys),	0,      0,      TEGRA_GPIO_PW1,	true,	1, 3300);
 FIXED_REG(9, en_3v3_fuse_pm269,		en_3v3_fuse,		FIXED_SUPPLY(en_3v3_sys), 	0,      0,      TEGRA_GPIO_PC1,	true,	0, 3300);
-FIXED_REG(12, en_3v3_pex_hvdd_pm269,	en_3v3_pex_hvdd,	FIXED_SUPPLY(en_3v3_sys), 	0,      0,      TEGRA_GPIO_PC6,	true,	0, 3300);
+//FIXED_REG(12, en_3v3_pex_hvdd_pm269,	en_3v3_pex_hvdd,	FIXED_SUPPLY(en_3v3_sys), 	0,      0,      TEGRA_GPIO_PC6,	true,	0, 3300);
 
 /* E1198/E1291 specific*/
 FIXED_REG(18, cam1_ldo_en,	cam1_ldo_en,	FIXED_SUPPLY(en_3v3_sys),	0,      0,      TEGRA_GPIO_PR6,		true,	0, 2800);
@@ -807,7 +810,6 @@ FIXED_REG_OD(17, en_vddio_vid_oc,	en_vddio_vid_oc,	FIXED_SUPPLY(en_5v0), 		0,   
 	ADD_FIXED_REG(en_vdd_com),		\
 	ADD_FIXED_REG(en_3v3_fuse),		\
 	ADD_FIXED_REG(en_3v3_emmc),		\
-	ADD_FIXED_REG(en_vdd_sdmmc1),		\
 	ADD_FIXED_REG(en_3v3_pex_hvdd),		\
 	ADD_FIXED_REG(en_1v8_cam),
 
@@ -822,15 +824,14 @@ FIXED_REG_OD(17, en_vddio_vid_oc,	en_vddio_vid_oc,	FIXED_SUPPLY(en_5v0), 		0,   
 	ADD_FIXED_REG(en_vdd_com),		\
 	ADD_FIXED_REG(en_3v3_fuse),		\
 	ADD_FIXED_REG(en_3v3_emmc),		\
-	ADD_FIXED_REG(en_vdd_sdmmc1),		\
 	ADD_FIXED_REG(en_3v3_pex_hvdd),		\
 	ADD_FIXED_REG(en_1v8_cam),
 
 #define PM269_FIXED_REG				\
 	ADD_FIXED_REG(en_5v_cp),		\
-	ADD_FIXED_REG(en_5v0),			\
-	ADD_FIXED_REG(en_ddr),			\
-	ADD_FIXED_REG(en_3v3_sys),		\
+	ADD_FIXED_REG(en_5v0_a04),		\
+	ADD_FIXED_REG(en_ddr_a04),		\
+	ADD_FIXED_REG(en_3v3_sys_a04),		\
 	ADD_FIXED_REG(en_3v3_modem),		\
 	ADD_FIXED_REG(cam1_ldo_en),		\
 	ADD_FIXED_REG(cam2_ldo_en),		\
@@ -838,12 +839,10 @@ FIXED_REG_OD(17, en_vddio_vid_oc,	en_vddio_vid_oc,	FIXED_SUPPLY(en_5v0), 		0,   
 	ADD_FIXED_REG(en_vdd_com),		\
 	ADD_FIXED_REG(en_3v3_fuse_pm269),	\
 	ADD_FIXED_REG(en_3v3_emmc),		\
-	ADD_FIXED_REG(en_3v3_pex_hvdd_pm269),	\
 	ADD_FIXED_REG(en_1v8_cam),		\
 	ADD_FIXED_REG(dis_5v_switch_e118x),	\
 	ADD_FIXED_REG(en_vbrtr),		\
 	ADD_FIXED_REG(en_usb1_vbus_oc_e118x),	\
-	ADD_FIXED_REG(en_usb3_vbus_oc_e118x),	\
 	ADD_FIXED_REG(en_vddio_vid_oc_pm269),
 
 #define PM311_FIXED_REG				\
@@ -858,7 +857,6 @@ FIXED_REG_OD(17, en_vddio_vid_oc,	en_vddio_vid_oc,	FIXED_SUPPLY(en_5v0), 		0,   
 	ADD_FIXED_REG(en_vdd_com),		\
 	ADD_FIXED_REG(en_3v3_fuse_pm269),	\
 	ADD_FIXED_REG(en_3v3_emmc),		\
-	ADD_FIXED_REG(en_3v3_pex_hvdd_pm269),	\
 	ADD_FIXED_REG(en_1v8_cam),		\
 	ADD_FIXED_REG(dis_5v_switch_e118x),	\
 	ADD_FIXED_REG(en_usb1_vbus_oc_pm311),	\
@@ -887,7 +885,6 @@ FIXED_REG_OD(17, en_vddio_vid_oc,	en_vddio_vid_oc,	FIXED_SUPPLY(en_5v0), 		0,   
 	ADD_FIXED_REG(en_vdd_com),		\
 	ADD_FIXED_REG(en_3v3_fuse),		\
 	ADD_FIXED_REG(en_3v3_emmc),		\
-	ADD_FIXED_REG(en_vdd_sdmmc1),		\
 	ADD_FIXED_REG(en_3v3_pex_hvdd),		\
 	ADD_FIXED_REG(en_1v8_cam),		\
 	ADD_FIXED_REG(dis_5v_switch_e118x),	\
@@ -947,7 +944,6 @@ static struct platform_device *fixed_reg_devs_e1198_a02[] = {
 	ADD_FIXED_REG(en_vdd_com),
 	ADD_FIXED_REG(en_3v3_fuse),
 	ADD_FIXED_REG(en_3v3_emmc),
-	ADD_FIXED_REG(en_vdd_sdmmc1),
 	ADD_FIXED_REG(en_3v3_pex_hvdd),
 	ADD_FIXED_REG(en_1v8_cam),
 	ADD_FIXED_REG(en_vdd_bl1_a03),
@@ -1189,15 +1185,18 @@ int __init cardhu_suspend_init(void)
 
 int __init cardhu_edp_init(void)
 {
-	unsigned int regulator_mA;
 
-	regulator_mA = get_maximum_cpu_current_supported();
-	if (!regulator_mA) {
-		regulator_mA = 6000; /* regular T30/s */
-	}
-	pr_info("%s: CPU regulator %d mA\n", __func__, regulator_mA);
+	unsigned int project_id = tegra3_get_project_id();
 
-	tegra_init_cpu_edp_limits(regulator_mA);
+	pr_info("%s : use asus edp policy\n", __func__);
+
+	if(TEGRA3_PROJECT_TF201 == project_id)
+		tegra_init_cpu_edp_limits(5000);
+	else if(TEGRA3_PROJECT_TF300T == project_id || TEGRA3_PROJECT_TF300TG == project_id || TEGRA3_PROJECT_TF300TL == project_id || TEGRA3_PROJECT_TF500T == project_id)
+		tegra_init_cpu_edp_limits(6000);
+	else if(TEGRA3_PROJECT_TF700T == project_id)
+		tegra_init_cpu_edp_limits(10000);
+
 	return 0;
 }
 #endif
@@ -1227,8 +1226,32 @@ static int __init cardhu_charger_late_init(void)
 	if (!machine_is_cardhu())
 		return 0;
 
-	platform_device_register(&cardhu_charger_device);
+	/* platform_device_register(&cardhu_charger_device); */
 	return 0;
 }
 
 late_initcall(cardhu_charger_late_init);
+
+unsigned int boot_reason=0;
+void tegra_booting_info(void )
+{
+	static void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
+	unsigned int reg;
+	#define PMC_RST_STATUS_WDT (1)
+	#define PMC_RST_STATUS_SW   (3)
+
+	reg = readl(pmc +0x1b4);
+	printk("tegra_booting_info reg=%x\n",reg );
+
+	if (reg ==PMC_RST_STATUS_SW){
+		boot_reason=PMC_RST_STATUS_SW;
+		printk("tegra_booting_info-SW reboot\n");
+	} else if (reg ==PMC_RST_STATUS_WDT){
+		boot_reason=PMC_RST_STATUS_WDT;
+		printk("tegra_booting_info-watchdog reboot\n");
+	} else{
+		boot_reason=0;
+		printk("tegra_booting_info-normal\n");
+	}
+}
+

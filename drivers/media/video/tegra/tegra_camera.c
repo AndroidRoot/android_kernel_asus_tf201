@@ -30,6 +30,8 @@
 #include <mach/powergate.h>
 
 #include <media/tegra_camera.h>
+#include <mach/board-cardhu-misc.h>
+#include <mach/pinmux.h>
 
 /* Eventually this should handle all clock and reset calls for the isp, vi,
  * vi_sensor, and csi modules, replacing nvrm and nvos completely for camera
@@ -58,8 +60,13 @@ struct tegra_camera_block {
 	bool is_enabled;
 };
 
+static struct tegra_camera_dev *p_cam_dev;
+
 static int tegra_camera_enable_clk(struct tegra_camera_dev *dev)
 {
+	if(tegra3_get_project_id() != TEGRA3_PROJECT_TF201)
+		tegra_pinmux_set_tristate(TEGRA_PINGROUP_CAM_MCLK, TEGRA_TRI_TRISTATE);
+
 	clk_enable(dev->vi_clk);
 	clk_enable(dev->vi_sensor_clk);
 	clk_enable(dev->csus_clk);
@@ -91,6 +98,9 @@ static int tegra_camera_disable_clk(struct tegra_camera_dev *dev)
 	clk_disable(dev->vi_clk);
 	tegra_periph_reset_assert(dev->vi_clk);
 
+	if(tegra3_get_project_id() != TEGRA3_PROJECT_TF201)
+		tegra_pinmux_set_tristate(TEGRA_PINGROUP_CAM_MCLK, TEGRA_TRI_NORMAL);
+
 	return 0;
 }
 
@@ -100,6 +110,20 @@ static int tegra_camera_enable_emc(struct tegra_camera_dev *dev)
 	clk_enable(dev->emc_clk);
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	clk_set_rate(dev->emc_clk, 300000000);
+#else
+	switch(tegra3_get_project_id()) {
+	case TEGRA3_PROJECT_TF300T:
+	case TEGRA3_PROJECT_TF300TG:
+	case TEGRA3_PROJECT_TF300TL:
+	case TEGRA3_PROJECT_TF500T:
+		clk_set_rate(dev->emc_clk, 667000000);
+		break;
+	case TEGRA3_PROJECT_TF700T:
+		clk_set_rate(dev->emc_clk, 800000000);
+		break;
+	default:
+		break;
+	}
 #endif
 	return ret;
 }
@@ -385,6 +409,31 @@ static const struct file_operations tegra_camera_fops = {
 	.release = tegra_camera_release,
 };
 
+int tegra_camera_mclk_on_off(int on)
+{
+    if (!p_cam_dev) return -1;
+
+    if (on){
+        printk("camera mclock on\n");
+        clk_set_rate(p_cam_dev->csus_clk, 6000000);
+        if ((tegra3_get_project_id()==TEGRA3_PROJECT_TF300T) ||
+            (tegra3_get_project_id()==TEGRA3_PROJECT_TF300TG) ||
+            (tegra3_get_project_id()==TEGRA3_PROJECT_TF300TL) ||
+            (tegra3_get_project_id()==TEGRA3_PROJECT_TF500T))
+            clk_set_rate(p_cam_dev->vi_sensor_clk, 12000000);
+        else
+            clk_set_rate(p_cam_dev->vi_sensor_clk, 24000000);
+        clk_enable(p_cam_dev->csus_clk);
+        clk_enable(p_cam_dev->vi_sensor_clk);
+    }
+    else{
+        clk_disable(p_cam_dev->vi_sensor_clk);
+        clk_disable(p_cam_dev->csus_clk);
+    }
+printk("-%s\n",__FUNCTION__);
+    return 0;
+}
+
 static int tegra_camera_clk_get(struct platform_device *pdev, const char *name,
 				struct clk **clk)
 {
@@ -444,6 +493,8 @@ static int tegra_camera_probe(struct platform_device *pdev)
 		}
 	}
 
+	regulator_set_voltage(dev->reg, 1200000, 1200000);
+
 	dev->misc_dev.minor = MISC_DYNAMIC_MINOR;
 	dev->misc_dev.name = TEGRA_CAMERA_NAME;
 	dev->misc_dev.fops = &tegra_camera_fops;
@@ -477,6 +528,7 @@ static int tegra_camera_probe(struct platform_device *pdev)
 
 	/* dev is set in order to restore in _remove */
 	platform_set_drvdata(pdev, dev);
+	p_cam_dev = dev;
 
 	return 0;
 
@@ -526,6 +578,9 @@ static int tegra_camera_suspend(struct platform_device *pdev, pm_message_t state
 		"application is holding on to camera. \n");
 	}
 	mutex_unlock(&dev->tegra_camera_lock);
+
+	if(tegra3_get_project_id() != TEGRA3_PROJECT_TF201)
+		tegra_pinmux_set_tristate(TEGRA_PINGROUP_CAM_MCLK, TEGRA_TRI_NORMAL);
 
 	return ret;
 }
