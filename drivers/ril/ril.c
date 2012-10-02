@@ -8,7 +8,7 @@
 #include <linux/switch.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
-#include <../../arch/arm/mach-tegra/include/mach/board-cardhu-misc.h>
+#include <mach/board-cardhu-misc.h>
 
 #include "pm-irq.h"
 #include "ril.h"
