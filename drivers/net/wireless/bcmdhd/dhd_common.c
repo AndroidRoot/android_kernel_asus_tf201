@@ -197,6 +197,8 @@ dhd_common_init(uint16 devid, osl_t *osh)
 #endif /* CONFIG_BCMDHD_FW_PATH */
 #ifdef CONFIG_BCMDHD_NVRAM_PATH
 	bcm_strncpy_s(nv_path, sizeof(nv_path), CONFIG_BCMDHD_NVRAM_PATH, MOD_PARAM_PATHLEN-1);
+#elif defined(CONFIG_BCMDHD_NVRAM_DIR) /* CONFIG_BCMDHD_NVRAM_PATH */
+    sprintf(nv_path, "%s/nvram_%x.txt", CONFIG_BCMDHD_NVRAM_DIR, devid);
 #else /* CONFIG_BCMDHD_NVRAM_PATH */
 	nv_path[0] = '\0';
 #endif /* CONFIG_BCMDHD_NVRAM_PATH */
