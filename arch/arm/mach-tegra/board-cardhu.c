@@ -1620,6 +1620,8 @@ static void cardhu_sata_init(void)
 static void cardhu_sata_init(void) { }
 #endif
 extern void tegra_booting_info(void );
+extern void bluesleep_setup_uart_port(struct platform_device *uart_dev);
+
 static void __init tegra_cardhu_init(void)
 {
 	tegra_thermal_init(&thermal_data,
@@ -1651,6 +1653,7 @@ static void __init tegra_cardhu_init(void)
 	cardhu_sensors_init();
 	//cardhu_audio_init();
 	cardhu_setup_bluesleep();
+        bluesleep_setup_uart_port(&tegra_uartc_device);
 	cardhu_sata_init();
 	//audio_wired_jack_init();
 	cardhu_pins_state_init();
