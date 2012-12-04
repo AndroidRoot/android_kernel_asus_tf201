@@ -118,6 +118,15 @@ extern "C"
 #define TEGRA3_DEVKIT_MISC_HW_0_PROJECT_6	0x6UL
 #define TEGRA3_DEVKIT_MISC_HW_0_PROJECT_7	0x7UL
 
+/* Extended project identifications on Tegra3 platform */
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTENDED_PROJECT_RANGE		3:0
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTENDED_PROJECT_DEFAULT	0x0UL
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTEDNED_PROJECT_1		0x1UL
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTEDNED_PROJECT_2		0x2UL
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTEDNED_PROJECT_3		0x3UL
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTEDNED_PROJECT_4		0x4UL
+#define TEGRA3_DEVKIT_MISC_HW_0_EXTEDNED_PROJECT_5		0x5UL
+
 /* Declare maximum length of project identification for strncmp() */
 #define TEGRA3_PROJECT_NAME_MAX_LEN	16
 
@@ -140,6 +149,20 @@ extern "C"
 #define TEGRA3_DEVKIT_MISC_HW_0_MP_DEFAULT	0x0UL //Engineering
 #define TEGRA3_DEVKIT_MISC_HW_0_MP_1		0x1UL //Mass Production
 
+struct pins {
+	/* gpio number */
+	const unsigned gpio;
+
+	/* pingroup number */
+	const unsigned pingroup;
+
+	/* gpio description*/
+	const char *label;
+
+	/* Indicates extended pins beyond extended projects */
+	const bool extended_pins;
+};
+
 extern unsigned char cardhu_chipid[17];
 
 enum tegra3_project {
@@ -151,8 +174,12 @@ enum tegra3_project {
 	TEGRA3_PROJECT_TF700T = 4,
 	TEGRA3_PROJECT_TF300TL = 5,
 	TEGRA3_PROJECT_ReserveB = 6,
+	TEGRA3_PROJECT_EXTENSION = 6,
 	TEGRA3_PROJECT_TF500T = 7,
-	TEGRA3_PROJECT_MAX = 8,
+	TEGRA3_PROJECT_ME301T = 11,
+	TEGRA3_PROJECT_ME301TL = 12,
+	TEGRA3_PROJECT_ME371T = 13,
+	TEGRA3_PROJECT_MAX = 14,
 };
 
 int __init cardhu_misc_init(void);

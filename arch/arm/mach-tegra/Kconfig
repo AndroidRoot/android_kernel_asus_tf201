@@ -160,6 +160,36 @@ config MACH_CARDHU
        help
          Support for NVIDIA Cardhu development platform
 
+config MACH_TF201
+       bool "TF201 board"
+       depends on ARCH_TEGRA_3x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5631 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5642 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
+       help
+         Support for Asus Transformer Prime
+
+config MACH_TF300
+       bool "TF300 board"
+       depends on ARCH_TEGRA_3x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5631 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5642 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
+       help
+         Support for ASUS Transformer (TF300T)
+
+config MACH_TF700
+       bool "TF700 board"
+       depends on ARCH_TEGRA_3x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5631 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_RT5642 if SND_SOC
+       select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
+       help
+         Support for Asus Transformer (TF700T)
+
 config MACH_P1852
        bool "P1852 board"
        depends on ARCH_TEGRA_3x_SOC

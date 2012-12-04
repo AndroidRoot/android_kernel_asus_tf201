@@ -174,6 +174,48 @@ obj-${CONFIG_MACH_CARDHU}               += board-cardhu-powermon.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-misc.o
 obj-${CONFIG_MACH_CARDHU}               += vibrator.o
 
+obj-${CONFIG_MACH_TF201}               += board-tf201.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-kbc.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-panel.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pinmux.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-power.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pm298-power-rails.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-pm299-power-rails.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-sdhci.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-sensors.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-memory.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-powermon.o
+obj-${CONFIG_MACH_TF201}               += board-tf201-misc.o
+obj-${CONFIG_MACH_TF201}               += vibrator.o
+
+obj-${CONFIG_MACH_TF300}               += board-tf300.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-kbc.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-panel.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-pinmux.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-power.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-pm298-power-rails.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-pm299-power-rails.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-sdhci.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-sensors.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-memory.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-powermon.o
+obj-${CONFIG_MACH_TF300}               += board-tf300-misc.o
+obj-${CONFIG_MACH_TF300}               += vibrator.o
+
+obj-${CONFIG_MACH_TF700}               += board-tf700.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-kbc.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-panel.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-pinmux.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-power.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-pm298-power-rails.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-pm299-power-rails.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-sdhci.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-sensors.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-memory.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-powermon.o
+obj-${CONFIG_MACH_TF700}               += board-tf700-misc.o
+obj-${CONFIG_MACH_TF700}               += vibrator.o
+
 obj-${CONFIG_MACH_KAI}                  += board-touch-kai-synaptics-spi.o
 obj-y                                   += board-touch-raydium_spi.o
 
