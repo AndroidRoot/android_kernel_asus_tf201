@@ -72,7 +72,7 @@ const struct tegra_drive_pingroup_desc tegra_soc_drive_pingroups[TEGRA_MAX_DRIVE
 	28,	0x3,	30,	0x3),
 	SET_DRIVE_PINGROUP(AT4,		0x87c,	14,	0x1f,	19,	0x1f,
 	28,	0x3,	30,	0x3),
-	SET_DRIVE_PINGROUP(AT5,		0x880,	14,	0x1f,	19,	0x1f,
+	SET_DRIVE_PINGROUP(AT5,		0x880,	12,	0x1f,	28,	0x1f,
 	28,	0x3,	30,	0x3),
 	DEFAULT_DRIVE_PINGROUP(CDEV1,		0x884),
 	DEFAULT_DRIVE_PINGROUP(CDEV2,		0x888),
